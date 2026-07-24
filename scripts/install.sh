@@ -37,4 +37,5 @@ echo "  1) Karabiner-Elements → Complex Modifications → Add rule → 'claude
 echo "  2) 폰: USB 디버깅 켜고 USB 연결"
 echo "  3) 데몬 실행: npm start"
 echo "  4) 폰 크롬에서 http://localhost:9200 열기 → 홈 화면에 추가(PWA)"
-echo "  5) Claude Code는 반드시 tmux 안에서 실행 (다이얼 기능 전제)"
+echo "  5) ~/.zshrc에 추가: source $(pwd)/shell/cld.sh  →  프로젝트에서 cld로 실행"
+echo "     (tmux는 다이얼 기능에만 필요 — cld가 자동으로 tmux 안에서 claude를 띄움)"

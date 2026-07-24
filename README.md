@@ -20,7 +20,9 @@
 ## 요구사항 (맥)
 
 - Node.js 18+
-- tmux — Claude Code를 **반드시 tmux 안에서 실행** (다이얼 기능의 전제)
+- tmux — **다이얼 기능(생각 토글, 모델 전환)에만 필요.** 허가 응답과 상태 표시는 hook 기반이라
+  어떤 터미널(VSCode 통합 터미널 포함)에서 실행해도 동작한다. 다이얼까지 쓰려면 Claude Code를
+  tmux 안에서 실행 — 아래 `cld` 함수가 이를 자동화한다. VSCode 통합 터미널 안에서 tmux를 켜는 것도 가능.
 - adb (`brew install android-platform-tools`) — 폰 USB 연결용
 - Karabiner-Elements (`brew install --cask karabiner-elements`) — 매크로패드 조합키 전역 감지
   (Hammerspoon을 이미 쓰고 있다면 `hammerspoon/init.lua`로 대체 가능 — 데몬 입장에선 `POST /api/key`만 오면 됨)
@@ -54,7 +56,23 @@ npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시�
 
 - 폰 크롬에서 `http://localhost:9200` → 메뉴 → **홈 화면에 추가** → 전체화면 PWA
 - 화면 꺼짐 방지(Wake Lock)는 대시보드가 자동 요청 (한 번 터치하면 확실히 켜짐)
-- Claude Code는 tmux 안에서 평소처럼 실행: `tmux` → `claude`
+- Claude Code 실행은 `cld` (아래) 또는 평소처럼 `claude`
+
+### `cld` — tmux 자동 실행 함수
+
+매번 `tmux` → `claude` 두 단계를 거치기 귀찮으니, `~/.zshrc`에 한 줄 추가:
+
+```bash
+source /path/to/claude-controller/shell/cld.sh
+```
+
+프로젝트 폴더에서 `cld`를 실행하면:
+
+- tmux 밖이면 프로젝트별 세션(`claude-<폴더명>`)을 만들어 그 안에서 claude 실행.
+  같은 폴더에서 다시 실행하면 기존 세션에 재접속, claude 종료 시 세션도 닫힘.
+- 이미 tmux 안이면(VSCode 터미널에서 tmux를 켠 경우 등) 그냥 claude 실행.
+- 인자는 그대로 전달: `cld --resume`
+- tmux가 없으면 경고 후 tmux 없이 claude 실행 (허가 응답·상태 표시는 그래도 전부 동작)
 
 ## 매크로패드 키맵 (EK3D, 제조사 프로그램으로 1회 설정)
 
@@ -139,6 +157,7 @@ npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시�
 - **허가 요청이 폰에 안 뜸** — 데몬을 hook 등록 *후에* 시작했는지, Claude Code 세션을 hook 등록
   후 새로 시작했는지 확인. `~/.claude/settings.json`에 `PermissionRequest` 항목 존재 확인.
 - **다이얼이 안 먹음** — Claude Code가 tmux 안에서 실행 중인지 확인(hook이 `$TMUX_PANE`을 보내야 함).
+  `cld`로 실행했으면 자동으로 충족된다. 다이얼만 tmux가 필요하고 나머지 기능은 tmux 없이 동작한다.
 - **MDM이 Karabiner를 차단(플랜 B)** — 폰 대시보드 터치 응답은 Karabiner 없이도 동작한다.
   Hammerspoon이 허용된다면 `hammerspoon/init.lua`가 동일 기능의 대체재.
   물리 버튼이 꼭 필요하면 데몬에 IOHIDManager 기반 키 감지(네이티브 헬퍼)를 추가하는 방안
