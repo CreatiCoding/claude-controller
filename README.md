@@ -17,62 +17,61 @@
 [안드로이드 폰] 크롬 → http://localhost:9200 (PWA 전체화면 + Wake Lock)
 ```
 
-## 요구사항 (맥)
+## 준비하기 (처음 한 번만, 10분)
 
-- Node.js 18+
-- tmux — **다이얼 기능(생각 토글, 모델 전환)에만 필요.** 허가 응답과 상태 표시는 hook 기반이라
-  어떤 터미널(VSCode 통합 터미널 포함)에서 실행해도 동작한다. 다이얼까지 쓰려면 Claude Code를
-  tmux 안에서 실행 — 아래 `cld` 함수가 이를 자동화한다. VSCode 통합 터미널 안에서 tmux를 켜는 것도 가능.
-- adb (`brew install android-platform-tools`) — 폰 USB 연결용
-- Karabiner-Elements (`brew install --cask karabiner-elements`) — 매크로패드 조합키 전역 감지
-  (Hammerspoon을 이미 쓰고 있다면 `hammerspoon/init.lua`로 대체 가능 — 데몬 입장에선 `POST /api/key`만 오면 됨)
-- 안드로이드 폰: 개발자 옵션에서 **USB 디버깅** 켜기
+**1. 맥에 필요한 것 설치**
 
-## 설치
+```bash
+brew install tmux android-platform-tools
+brew install --cask karabiner-elements
+```
+
+**2. 이 리포 설치**
 
 ```bash
 git clone <이 리포> && cd claude-controller
 ./scripts/install.sh
 ```
 
-스크립트가 하는 일:
+(npm 설치 + Claude Code hook 등록 + Karabiner 규칙 복사까지 알아서 해준다)
 
-1. `npm install`
-2. `~/.claude/settings.json`에 hook 등록 (`npm run install-hooks`)
-   — 기존 설정은 백업(`settings.json.claude-controller.bak`) 후 병합. 제거는 `npm run uninstall-hooks`
-3. tmux / adb / Karabiner-Elements 설치 여부 점검 +
-   Karabiner 규칙 파일을 `~/.config/karabiner/assets/complex_modifications/`에 복사
+**3. Karabiner에서 규칙 켜기**
 
-그다음 수동 1회 작업:
+Karabiner-Elements 열기 → Complex Modifications → **Add rule** → "claude-controller" **Enable**
 
-- Karabiner-Elements → **Complex Modifications → Add rule** → "claude-controller" 규칙 활성화
-- 폰을 USB로 연결하고 디버깅 허용 팝업 승인
-
-## 실행
+**4. `~/.zshrc`에 한 줄 추가** (터미널에서 `cld` 명령을 쓰기 위해)
 
 ```bash
-npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시도
+source /경로/claude-controller/shell/cld.sh
 ```
 
-- 폰 크롬에서 `http://localhost:9200` → 메뉴 → **홈 화면에 추가** → 전체화면 PWA
-- 화면 꺼짐 방지(Wake Lock)는 대시보드가 자동 요청 (한 번 터치하면 확실히 켜짐)
-- Claude Code 실행은 `cld` (아래) 또는 평소처럼 `claude`
+**5. 폰 준비**
 
-### `cld` — tmux 자동 실행 함수
+- 설정 → 개발자 옵션 → **USB 디버깅** 켜기
+- USB 케이블로 맥에 연결 → "디버깅 허용" 팝업 **허용**
 
-매번 `tmux` → `claude` 두 단계를 거치기 귀찮으니, `~/.zshrc`에 한 줄 추가:
+끝. 매크로패드는 윈도우 PC에서 키맵만 한 번 설정해두면 된다(아래 표).
+
+## 사용법 (매일 이것만)
 
 ```bash
-source /path/to/claude-controller/shell/cld.sh
+npm start     # ① 데몬 켜기 (claude-controller 폴더에서)
+cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```
 
-프로젝트 폴더에서 `cld`를 실행하면:
+③ 폰 크롬에서 `http://localhost:9200` 열고 거치대에 두기
+(처음 한 번 메뉴 → **홈 화면에 추가** 해두면 앱처럼 전체화면으로 뜸)
 
-- tmux 밖이면 프로젝트별 세션(`claude-<폴더명>`)을 만들어 그 안에서 claude 실행.
-  같은 폴더에서 다시 실행하면 기존 세션에 재접속, claude 종료 시 세션도 닫힘.
-- 이미 tmux 안이면(VSCode 터미널에서 tmux를 켠 경우 등) 그냥 claude 실행.
-- 인자는 그대로 전달: `cld --resume`
-- tmux가 없으면 경고 후 tmux 없이 claude 실행 (허가 응답·상태 표시는 그래도 전부 동작)
+이후엔 자동이다:
+
+- Claude가 허가를 물으면 → **폰 화면이 주황색으로 깜빡깜빡** + 진동
+- 매크로패드 **1(예) / 2(항상 예) / 3(아니오)** 누르면 끝. 폰 화면 터치로도 됨
+- 노브: **좌/우 = 생각 토글, 누름 = 모델 전환**
+- 폰을 안 보고 있어도 5분 안에 응답 없으면 터미널에 평소처럼 프롬프트가 뜬다
+
+> tmux는 노브 기능에만 필요하다. 그냥 `claude`로(또는 VSCode 터미널에서) 실행해도
+> 허가 응답·상태 표시는 전부 동작한다. `cld`는 tmux를 알아서 씌워주는 명령
+> (같은 폴더에서 다시 실행하면 기존 세션에 재접속, `cld --resume`처럼 인자도 전달됨).
 
 ## 매크로패드 키맵 (EK3D, 제조사 프로그램으로 1회 설정)
 
