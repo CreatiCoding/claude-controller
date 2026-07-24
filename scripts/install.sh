@@ -19,15 +19,21 @@ for cmd in tmux adb; do
     echo "  ⚠️  $cmd 없음 — brew install $cmd  (adb는: brew install android-platform-tools)"
   fi
 done
-if [ -d "/Applications/Hammerspoon.app" ]; then
-  echo "  ✅ Hammerspoon 설치됨"
+if [ -d "/Applications/Karabiner-Elements.app" ]; then
+  echo "  ✅ Karabiner-Elements 설치됨"
 else
-  echo "  ⚠️  Hammerspoon 없음 — brew install --cask hammerspoon (MDM 차단 시 README의 플랜 B 참고)"
+  echo "  ⚠️  Karabiner-Elements 없음 — brew install --cask karabiner-elements (MDM 차단 시 README의 플랜 B 참고)"
 fi
+
+# Karabiner 규칙 파일 복사 (설정 디렉터리가 있으면)
+KARABINER_DIR="$HOME/.config/karabiner/assets/complex_modifications"
+mkdir -p "$KARABINER_DIR"
+cp karabiner/claude-controller.json "$KARABINER_DIR/"
+echo "  ✅ Karabiner 규칙 복사됨 → $KARABINER_DIR/claude-controller.json"
 
 echo
 echo "다음 단계:"
-echo "  1) hammerspoon/init.lua 내용을 ~/.hammerspoon/init.lua 에 추가 후 Hammerspoon 재시작"
+echo "  1) Karabiner-Elements → Complex Modifications → Add rule → 'claude-controller' 규칙 활성화"
 echo "  2) 폰: USB 디버깅 켜고 USB 연결"
 echo "  3) 데몬 실행: npm start"
 echo "  4) 폰 크롬에서 http://localhost:9200 열기 → 홈 화면에 추가(PWA)"

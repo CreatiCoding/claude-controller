@@ -8,7 +8,7 @@
   Ctrl+Alt+Shift+Cmd+1~6            │
                               데몬 서버 (포트 9200)
                               ├ ① Claude Code hook 수신 (PermissionRequest 등)
-                              ├ ② Hammerspoon: 조합키 전역 감지 → 데몬에 전달
+                              ├ ② Karabiner-Elements: 조합키 전역 감지 → 데몬에 전달
                               ├ ③ tmux send-keys: /model, 생각 토글 주입
                               └ ④ WebSocket: 대시보드 상태 송출
                                     │
@@ -22,7 +22,8 @@
 - Node.js 18+
 - tmux — Claude Code를 **반드시 tmux 안에서 실행** (다이얼 기능의 전제)
 - adb (`brew install android-platform-tools`) — 폰 USB 연결용
-- Hammerspoon (`brew install --cask hammerspoon`) — 매크로패드 조합키 전역 감지
+- Karabiner-Elements (`brew install --cask karabiner-elements`) — 매크로패드 조합키 전역 감지
+  (Hammerspoon을 이미 쓰고 있다면 `hammerspoon/init.lua`로 대체 가능 — 데몬 입장에선 `POST /api/key`만 오면 됨)
 - 안드로이드 폰: 개발자 옵션에서 **USB 디버깅** 켜기
 
 ## 설치
@@ -37,12 +38,12 @@ git clone <이 리포> && cd claude-controller
 1. `npm install`
 2. `~/.claude/settings.json`에 hook 등록 (`npm run install-hooks`)
    — 기존 설정은 백업(`settings.json.claude-controller.bak`) 후 병합. 제거는 `npm run uninstall-hooks`
-3. tmux / adb / Hammerspoon 설치 여부 점검
+3. tmux / adb / Karabiner-Elements 설치 여부 점검 +
+   Karabiner 규칙 파일을 `~/.config/karabiner/assets/complex_modifications/`에 복사
 
 그다음 수동 1회 작업:
 
-- `hammerspoon/init.lua` 내용을 `~/.hammerspoon/init.lua`에 추가하고 Hammerspoon 재시작
-  (접근성 권한 허용 필요)
+- Karabiner-Elements → **Complex Modifications → Add rule** → "claude-controller" 규칙 활성화
 - 폰을 USB로 연결하고 디버깅 허용 팝업 승인
 
 ## 실행
@@ -67,8 +68,9 @@ npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시�
 | 노브 누름 | 동일+6 | 모델 순환 (`/model sonnet` ↔ `/model opus`, config로 변경) |
 
 - 허가 요청이 여러 개면 1~3번 키는 **가장 오래 기다린 요청**에 적용된다.
-- 다이얼(4~6)은 **가장 최근 활동한 tmux 세션**에 적용된다. 폰 화면의 버튼은 세션별로 지정 가능.
-- 매크로패드 없이도 폰 터치만으로 모든 응답 가능(백업 경로).
+- 다이얼(4~6)은 **가장 최근 활동한 tmux 세션**에 적용된다.
+- 매크로패드 없이도 폰 터치로 허가 응답 가능(백업 경로). 다이얼 기능(생각/모델)은
+  매크로패드 전용이며 `POST /api/action`으로도 호출할 수 있다.
 
 ## 동작 원리
 
@@ -131,12 +133,14 @@ npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시�
 
 - **폰에서 접속 안 됨** — `adb devices`로 기기 인식 확인(디버깅 허용 팝업), 케이블/포트 교체.
   데몬 로그에 `[adb] reverse tcp:9200 연결됨`이 떠야 정상.
-- **매크로패드 반응 없음** — Hammerspoon 콘솔에서 바인딩 로드 확인, 접근성 권한 확인.
+- **매크로패드 반응 없음** — Karabiner-Elements에서 규칙이 활성화됐는지, 입력 모니터링 권한이
+  허용됐는지 확인. Karabiner EventViewer로 매크로패드가 실제로 hyper+숫자를 보내는지 확인.
   매크로패드 키맵(제조사 윈도우 프로그램) 설정이 완료됐는지 확인.
 - **허가 요청이 폰에 안 뜸** — 데몬을 hook 등록 *후에* 시작했는지, Claude Code 세션을 hook 등록
   후 새로 시작했는지 확인. `~/.claude/settings.json`에 `PermissionRequest` 항목 존재 확인.
 - **다이얼이 안 먹음** — Claude Code가 tmux 안에서 실행 중인지 확인(hook이 `$TMUX_PANE`을 보내야 함).
-- **MDM이 Hammerspoon을 차단(플랜 B)** — 폰 대시보드 터치 응답은 Hammerspoon 없이도 동작한다.
+- **MDM이 Karabiner를 차단(플랜 B)** — 폰 대시보드 터치 응답은 Karabiner 없이도 동작한다.
+  Hammerspoon이 허용된다면 `hammerspoon/init.lua`가 동일 기능의 대체재.
   물리 버튼이 꼭 필요하면 데몬에 IOHIDManager 기반 키 감지(네이티브 헬퍼)를 추가하는 방안
   (CLAUDE.md의 플랜 B). 필요 시 이슈로 진행.
 
@@ -148,5 +152,5 @@ npm start          # 데몬 시작 — adb reverse는 30초마다 자동 재시�
 - [x] "항상 예" 위치 — 프로젝트 `.claude/settings.local.json`의 `permissions.allow`
       (Local 스코프가 User보다 우선, gitignore 대상이라 팀에 영향 없음).
 - [x] 생각 토글 단축키 — `Meta+T` (`chat:thinkingToggle`). tmux로는 `M-t` 주입.
-- [ ] 회사 MDM의 Hammerspoon 허용 여부 — 실제 맥에서 확인 필요 (플랜 B 문서화됨).
+- [ ] 회사 MDM의 Karabiner-Elements 허용 여부 — 실제 맥에서 확인 필요 (대체재/플랜 B 문서화됨).
 - [ ] 매크로패드 키맵 설정 완료 여부 — 개인 윈도우 PC에서 1회 설정 필요.

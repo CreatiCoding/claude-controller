@@ -1,4 +1,6 @@
 -- claude-controller: 매크로패드(하이퍼키+1~6) → 데몬 API
+-- ※ 기본 경로는 Karabiner-Elements(karabiner/claude-controller.json)이며,
+--    이 파일은 Hammerspoon을 선호하는 경우의 대체재다. 둘 중 하나만 쓰면 된다.
 -- 매크로패드가 Ctrl+Alt+Shift+Win+숫자를 보내면 맥에서는 cmd+ctrl+alt+shift+숫자로 들어온다.
 -- 사용법: 이 파일 내용을 ~/.hammerspoon/init.lua 에 추가(또는 require)하고 Hammerspoon 재시작.
 
