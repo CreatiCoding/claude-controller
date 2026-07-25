@@ -1,6 +1,7 @@
 // claude-controller 데몬: hook 수신 + WebSocket 대시보드 + 허가 응답 + tmux 주입
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
 import config, { ROOT } from './config.js';
@@ -17,6 +18,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.json': 'application/manifest+json',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
   '.js': 'text/javascript',
   '.css': 'text/css',
 };
@@ -181,7 +183,7 @@ async function handleKey(key) {
 }
 
 // ---------- HTTP 라우팅 ----------
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://x');
 
@@ -215,14 +217,14 @@ const server = http.createServer(async (req, res) => {
     console.error('[http]', err);
     if (!res.headersSent) json(res, 500, { error: err.message });
   }
-});
+};
 
 // ---------- WebSocket ----------
 const wss = new WebSocketServer({ noServer: true });
-server.on('upgrade', (req, socket, head) => {
+const upgradeHandler = (req, socket, head) => {
   if (new URL(req.url, 'http://x').pathname !== '/ws') return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-});
+};
 
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'state', ...store.snapshot() }));
@@ -239,9 +241,67 @@ store.onChange = () => {
   });
 };
 
-// ---------- 시작 ----------
-server.listen(config.port, config.host, () => {
-  console.log(`[daemon] http://${config.host}:${config.port} 에서 대기 중`);
-  console.log(`[daemon] 폰: USB 연결 후 크롬에서 http://localhost:${config.port}`);
-  if (config.adb.enabled) startAdbReverse(config.port, config.adb.intervalSeconds);
-});
+// ---------- 리스닝 (다중 바인딩) ----------
+// host:'auto'면 127.0.0.1에 항상 바인딩하고, 폰 USB 테더링 인터페이스
+// (아이폰 172.20.10.x / 안드로이드 192.168.42.x)가 나타나면 자동으로 추가 바인딩.
+// 케이블을 나중에 꽂아도 붙고, 회사망 인터페이스에는 절대 열지 않는다.
+const servers = new Map(); // addr -> http.Server
+
+function listenOn(addr, onReady) {
+  if (servers.has(addr)) return;
+  const s = http.createServer(requestHandler);
+  s.on('upgrade', upgradeHandler);
+  s.on('error', (err) => {
+    console.error(`[daemon] ${addr}:${config.port} 바인딩 실패: ${err.message}`);
+    servers.delete(addr);
+  });
+  s.listen(config.port, addr, () => {
+    console.log(`[daemon] http://${addr}:${config.port} 에서 대기 중`);
+    onReady?.();
+  });
+  servers.set(addr, s);
+}
+
+function tetherAddrs() {
+  const found = [];
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const i of ifaces ?? []) {
+      if (i.family === 'IPv4' && config.autoBindSubnets.some((p) => i.address.startsWith(p))) {
+        found.push(i.address);
+      }
+    }
+  }
+  return found;
+}
+
+function syncBindings() {
+  const want = tetherAddrs();
+  for (const addr of want) {
+    listenOn(addr, () =>
+      console.log(`[daemon] 폰 테더링 감지 — 폰 브라우저에서 http://${addr}:${config.port} 접속`));
+  }
+  // 케이블이 빠져 사라진 인터페이스는 정리
+  for (const [addr, s] of servers) {
+    if (addr !== '127.0.0.1' && !want.includes(addr)) {
+      s.close();
+      servers.delete(addr);
+      console.log(`[daemon] ${addr} 테더링 해제됨`);
+    }
+  }
+}
+
+if (config.host === 'auto') {
+  listenOn('127.0.0.1', () => {
+    console.log(`[daemon] 안드로이드: adb reverse 후 폰에서 http://localhost:${config.port}`);
+    console.log('[daemon] 아이폰: 개인용 핫스팟 켜고 USB 연결 → 감지되면 접속 주소를 여기 표시');
+  });
+  syncBindings();
+  setInterval(syncBindings, 10_000).unref();
+} else {
+  if (config.host === '0.0.0.0') {
+    console.warn('[daemon] 경고: 모든 인터페이스에 바인딩합니다 — 같은 네트워크의 누구나 승인 API에 접근 가능');
+  }
+  listenOn(config.host);
+}
+
+if (config.adb.enabled) startAdbReverse(config.port, config.adb.intervalSeconds);

@@ -12,9 +12,10 @@
                               ├ ③ tmux send-keys: /model, 생각 토글 주입
                               └ ④ WebSocket: 대시보드 상태 송출
                                     │
-                              USB 케이블 (adb reverse tcp:9200 tcp:9200)
+                              USB 케이블
+                              (아이폰: USB 테더링 / 안드로이드: adb reverse)
                                     ▼
-[안드로이드 폰] 크롬 → http://localhost:9200 (PWA 전체화면 + Wake Lock)
+[폰] 브라우저 → 대시보드 (PWA 전체화면 + Wake Lock)
 ```
 
 ## 준비하기 (처음 한 번만, 10분)
@@ -22,8 +23,9 @@
 **1. 맥에 필요한 것 설치**
 
 ```bash
-brew install tmux android-platform-tools
+brew install tmux
 brew install --cask karabiner-elements
+# 안드로이드 폰을 쓸 때만: brew install android-platform-tools
 ```
 
 **2. 이 리포 설치**
@@ -47,8 +49,17 @@ source /경로/claude-controller/shell/cld.sh
 
 **5. 폰 준비**
 
+아이폰:
+
+- 설정 → 개인용 핫스팟 → **다른 사람의 연결 허용** 켜기 (유심/데이터 요금제 필요)
+- USB 케이블로 맥에 연결 → 맥 네트워크에 "iPhone USB" 인터페이스가 생기면 끝
+- ⚠️ 맥의 인터넷이 폰 데이터로 새지 않게: 시스템 설정 → 네트워크 → ⋯ → **서비스 순서**에서
+  iPhone USB를 **맨 아래**로
+
+안드로이드:
+
 - 설정 → 개발자 옵션 → **USB 디버깅** 켜기
-- USB 케이블로 맥에 연결 → "디버깅 허용" 팝업 **허용**
+- USB 케이블로 맥에 연결 → "디버깅 허용" 팝업 **허용** (`brew install android-platform-tools` 필요)
 
 끝. 매크로패드는 윈도우 PC에서 키맵만 한 번 설정해두면 된다(아래 표).
 
@@ -59,8 +70,11 @@ npm start     # ① 데몬 켜기 (claude-controller 폴더에서)
 cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```
 
-③ 폰 크롬에서 `http://localhost:9200` 열고 거치대에 두기
-(처음 한 번 메뉴 → **홈 화면에 추가** 해두면 앱처럼 전체화면으로 뜸)
+③ 폰 브라우저에서 대시보드 열고 거치대에 두기
+
+- **아이폰**: 케이블 꽂으면 데몬이 자동 감지 → 로그에 뜨는 주소(`http://172.20.10.x:9200`)를
+  사파리에서 열기. 처음 한 번 공유 → **홈 화면에 추가** 해두면 다음부턴 아이콘 탭 한 번
+- **안드로이드**: 크롬에서 `http://localhost:9200` (adb reverse 자동)
 
 이후엔 자동이다:
 
@@ -151,7 +165,10 @@ cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 
 ## 문제 해결
 
-- **폰에서 접속 안 됨** — `adb devices`로 기기 인식 확인(디버깅 허용 팝업), 케이블/포트 교체.
+- **아이폰에서 접속 안 됨** — 개인용 핫스팟이 켜져 있는지, 데몬 로그에
+  `폰 테더링 감지 — http://172.20.10.x:9200` 가 떴는지 확인(감지는 10초 주기).
+  Wake Lock은 iOS 16.4+ 사파리 필요. 아이폰은 진동 알림이 안 되므로 화면 점멸이 대신한다.
+- **안드로이드에서 접속 안 됨** — `adb devices`로 기기 인식 확인(디버깅 허용 팝업), 케이블/포트 교체.
   데몬 로그에 `[adb] reverse tcp:9200 연결됨`이 떠야 정상.
 - **매크로패드 반응 없음** — Karabiner-Elements에서 규칙이 활성화됐는지, 입력 모니터링 권한이
   허용됐는지 확인. Karabiner EventViewer로 매크로패드가 실제로 f19~f24를 보내는지 확인.

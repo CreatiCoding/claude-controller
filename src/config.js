@@ -6,8 +6,15 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const defaults = {
-  host: '127.0.0.1',
+  // 'auto': 127.0.0.1 + 아이폰 USB 테더링 인터페이스(아래 autoBindSubnets)를
+  // 자동 감지해 함께 바인딩. 특정 주소만 쓰려면 IP 문자열로 지정.
+  host: 'auto',
   port: 9200,
+
+  // host가 'auto'일 때 추가로 바인딩할 IPv4 프리픽스.
+  // 172.20.10. = 아이폰 개인용 핫스팟(USB 테더링) 고정 대역.
+  // 192.168.42. = 안드로이드 USB 테더링 기본 대역.
+  autoBindSubnets: ['172.20.10.', '192.168.42.'],
 
   // 허가 요청(PermissionRequest hook)이 폰/매크로패드 응답을 기다리는 시간(초).
   // 초과하면 'passthrough' — hook이 아무 결정도 내리지 않고 터미널의 기본 허가
