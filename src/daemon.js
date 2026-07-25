@@ -86,14 +86,24 @@ async function handleHookEvent(req, res) {
       // 응답 대기형: 폰/매크로패드의 결정이 올 때까지 이 HTTP 응답을 잡아둔다.
       store.upsertSession(sid, { ...base, lastEvent: 'permission' });
       let timer;
-      const decision = await new Promise((resolve) => {
+      let pendingId;
+      const wait = new Promise((resolve) => {
         const pending = store.addPending({ sessionId: sid, payload, resolve });
+        pendingId = pending.id;
         console.log(`[perm] 대기: ${pending.toolName} ${summarizeInput(pending.toolInput)} (${sid.slice(0, 8)})`);
         timer = setTimeout(
           () => store.resolvePending(pending.id, { decision: 'passthrough', reason: 'timeout' }),
           config.permissionWaitSeconds * 1000,
         );
       });
+      // hook 프로세스가 먼저 죽으면(세션 강제 종료 등) 유령 요청을 즉시 정리
+      res.on('close', () => {
+        if (store.pending.has(pendingId)) {
+          console.log('[perm] hook 연결 끊김 — 요청 정리');
+          store.resolvePending(pendingId, { decision: 'passthrough', reason: 'disconnected' });
+        }
+      });
+      const decision = await wait;
       clearTimeout(timer);
 
       if (decision.decision === 'always' && decision.rule) {
