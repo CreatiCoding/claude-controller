@@ -5,7 +5,7 @@
 
 ```
 [토스 매크로패드(EK3D)] ──USB──▶ [맥북]
-  Ctrl+Alt+Shift+Cmd+1~6            │
+        F19~F24                     │
                               데몬 서버 (포트 9200)
                               ├ ① Claude Code hook 수신 (PermissionRequest 등)
                               ├ ② Karabiner-Elements: 조합키 전역 감지 → 데몬에 전달
@@ -73,16 +73,19 @@ cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 > 허가 응답·상태 표시는 전부 동작한다. `cld`는 tmux를 알아서 씌워주는 명령
 > (같은 폴더에서 다시 실행하면 기존 세션에 재접속, `cld --resume`처럼 인자도 전달됨).
 
-## 매크로패드 키맵 (EK3D, 제조사 프로그램으로 1회 설정)
+## 매크로패드 키맵 (EK3D, 제조사 프로그램으로 1회 설정 — 완료)
 
 | 키 | 매크로패드 전송 | 동작 |
 |----|----|----|
-| KEY1 | Ctrl+Alt+Shift+Win+1 | **예** (이번 1회 승인) |
-| KEY2 | Ctrl+Alt+Shift+Win+2 | **항상 예** (프로젝트 `.claude/settings.local.json`에 allow 규칙 추가 후 승인) |
-| KEY3 | Ctrl+Alt+Shift+Win+3 | **아니오** (거부) |
-| 노브 좌 | 동일+4 | 생각 토글 (OFF 방향) |
-| 노브 우 | 동일+5 | 생각 토글 (ON 방향) |
-| 노브 누름 | 동일+6 | 모델 순환 (`/model sonnet` ↔ `/model opus`, config로 변경) |
+| KEY1 | F19 | **예** (이번 1회 승인) |
+| KEY2 | F20 | **항상 예** (프로젝트 `.claude/settings.local.json`에 allow 규칙 추가 후 승인) |
+| KEY3 | F21 | **아니오** (거부) |
+| 노브 좌 | F22 | 생각 토글 (OFF 방향) |
+| 노브 우 | F23 | 생각 토글 (ON 방향) |
+| 노브 누름 | F24 | 모델 순환 (`/model sonnet` ↔ `/model opus`, config로 변경) |
+
+키 배치가 다르면 `karabiner/claude-controller.json`에서 `f19`~`f24`와 `key` 번호의
+짝만 바꾸고, 파일을 다시 복사(`./scripts/install.sh`) 후 Karabiner 규칙을 다시 켜면 된다.
 
 - 허가 요청이 여러 개면 1~3번 키는 **가장 오래 기다린 요청**에 적용된다.
 - 다이얼(4~6)은 **가장 최근 활동한 tmux 세션**에 적용된다.
@@ -151,8 +154,7 @@ cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 - **폰에서 접속 안 됨** — `adb devices`로 기기 인식 확인(디버깅 허용 팝업), 케이블/포트 교체.
   데몬 로그에 `[adb] reverse tcp:9200 연결됨`이 떠야 정상.
 - **매크로패드 반응 없음** — Karabiner-Elements에서 규칙이 활성화됐는지, 입력 모니터링 권한이
-  허용됐는지 확인. Karabiner EventViewer로 매크로패드가 실제로 hyper+숫자를 보내는지 확인.
-  매크로패드 키맵(제조사 윈도우 프로그램) 설정이 완료됐는지 확인.
+  허용됐는지 확인. Karabiner EventViewer로 매크로패드가 실제로 f19~f24를 보내는지 확인.
 - **허가 요청이 폰에 안 뜸** — 데몬을 hook 등록 *후에* 시작했는지, Claude Code 세션을 hook 등록
   후 새로 시작했는지 확인. `~/.claude/settings.json`에 `PermissionRequest` 항목 존재 확인.
 - **다이얼이 안 먹음** — Claude Code가 tmux 안에서 실행 중인지 확인(hook이 `$TMUX_PANE`을 보내야 함).
@@ -171,4 +173,4 @@ cld           # ② 작업할 프로젝트 폴더에서 Claude Code 실행
       (Local 스코프가 User보다 우선, gitignore 대상이라 팀에 영향 없음).
 - [x] 생각 토글 단축키 — `Meta+T` (`chat:thinkingToggle`). tmux로는 `M-t` 주입.
 - [ ] 회사 MDM의 Karabiner-Elements 허용 여부 — 실제 맥에서 확인 필요 (대체재/플랜 B 문서화됨).
-- [ ] 매크로패드 키맵 설정 완료 여부 — 개인 윈도우 PC에서 1회 설정 필요.
+- [x] 매크로패드 키맵 설정 — F19~F24로 설정 완료 (제조사 프로그램이 F19~F24를 지원함이 실기기로 확인됨).

@@ -1,37 +1,37 @@
 {
-  "title": "claude-controller: 매크로패드(하이퍼키+1~6) → 데몬",
+  "title": "claude-controller: 매크로패드(F19~F24) → 데몬",
   "rules": [
     {
-      "description": "hyper+1~6 → claude-controller 데몬 API (포트 9200)",
+      "description": "F19~F24 → claude-controller 데몬 API (포트 9200)",
       "manipulators": [
         {
           "type": "basic",
-          "from": { "key_code": "1", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f19", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":1}' http://127.0.0.1:9200/api/key >/dev/null" }]
         },
         {
           "type": "basic",
-          "from": { "key_code": "2", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f20", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":2}' http://127.0.0.1:9200/api/key >/dev/null" }]
         },
         {
           "type": "basic",
-          "from": { "key_code": "3", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f21", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":3}' http://127.0.0.1:9200/api/key >/dev/null" }]
         },
         {
           "type": "basic",
-          "from": { "key_code": "4", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f22", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":4}' http://127.0.0.1:9200/api/key >/dev/null" }]
         },
         {
           "type": "basic",
-          "from": { "key_code": "5", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f23", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":5}' http://127.0.0.1:9200/api/key >/dev/null" }]
         },
         {
           "type": "basic",
-          "from": { "key_code": "6", "modifiers": { "mandatory": ["command", "control", "option", "shift"] } },
+          "from": { "key_code": "f24", "modifiers": { "optional": ["any"] } },
           "to": [{ "shell_command": "/usr/bin/curl -s -m 2 -X POST -H 'Content-Type: application/json' -d '{\"key\":6}' http://127.0.0.1:9200/api/key >/dev/null" }]
         }
       ]

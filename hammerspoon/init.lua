@@ -1,11 +1,12 @@
--- claude-controller: 매크로패드(하이퍼키+1~6) → 데몬 API
+-- claude-controller: 매크로패드(F19~F24) → 데몬 API
 -- ※ 기본 경로는 Karabiner-Elements(karabiner/claude-controller.json)이며,
 --    이 파일은 Hammerspoon을 선호하는 경우의 대체재다. 둘 중 하나만 쓰면 된다.
--- 매크로패드가 Ctrl+Alt+Shift+Win+숫자를 보내면 맥에서는 cmd+ctrl+alt+shift+숫자로 들어온다.
 -- 사용법: 이 파일 내용을 ~/.hammerspoon/init.lua 에 추가(또는 require)하고 Hammerspoon 재시작.
 
 local DAEMON = "http://127.0.0.1:9200"
-local HYPER = { "cmd", "ctrl", "alt", "shift" }
+
+-- F19~F24 → 데몬 키 번호 1~6
+local KEYMAP = { f19 = 1, f20 = 2, f21 = 3, f22 = 4, f23 = 5, f24 = 6 }
 
 local function sendKey(n)
   hs.http.asyncPost(
@@ -14,7 +15,6 @@ local function sendKey(n)
     { ["Content-Type"] = "application/json" },
     function(status, body)
       if status ~= 200 then
-        -- 대기 중인 허가 요청이 없는 등 무시해도 되는 경우: 짧게만 알림
         local msg = "claude-controller: 키 " .. n .. " 실패"
         if body and #body > 0 then
           local ok, parsed = pcall(hs.json.decode, body)
@@ -26,8 +26,8 @@ local function sendKey(n)
   )
 end
 
-for n = 1, 6 do
-  hs.hotkey.bind(HYPER, tostring(n), function() sendKey(n) end)
+for key, n in pairs(KEYMAP) do
+  hs.hotkey.bind({}, key, function() sendKey(n) end)
 end
 
-hs.alert.show("claude-controller 키 바인딩 로드됨 (hyper+1~6)", 1.5)
+hs.alert.show("claude-controller 키 바인딩 로드됨 (F19~F24)", 1.5)
