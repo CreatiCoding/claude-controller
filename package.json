@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "맥북의 Claude Code 세션을 폰 대시보드(+선택: 매크로패드)로 원격 제어하는 데몬",
+  "license": "MIT",
+  "author": "CreatiCoding <nodejsdeveloper@kakao.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CreatiCoding/claude-controller.git"
+  },
   "packageManager": "yarn@4.16.0",
   "scripts": {
     "start": "node src/daemon.js",

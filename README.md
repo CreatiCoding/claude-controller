@@ -3,6 +3,10 @@
 맥북에서 다른 작업 중에도, **폰 화면**으로 Claude Code 세션 상태를 실시간으로 보고,
 터치로 허가 응답(예 / 항상 예 / 아니오)을 보내는 시스템.
 
+> **Disclaimer**: Anthropic과 무관한 비공식 커뮤니티 도구입니다. "Claude"는 Anthropic PBC의
+> 상표이며, 이 프로젝트는 Claude Code의 공식 hook 인터페이스를 사용할 뿐 Anthropic의
+> 보증·후원을 받지 않습니다.
+
 ```
 [맥북] 데몬 서버 (포트 9200)
   ├ ① Claude Code hook 수신 (PermissionRequest 등)
@@ -156,3 +160,7 @@ USB 터널(테더링/adb reverse)이라 Wi-Fi 등 외부 네트워크를 전혀 
 - "항상 예" 위치 — 프로젝트 `.claude/settings.local.json`의 `permissions.allow`
   (Local 스코프가 User보다 우선, gitignore 대상이라 팀에 영향 없음).
 - 매크로패드 관련 노트는 [ADVANCED_MACROPAD.md](ADVANCED_MACROPAD.md) 참고.
+
+## 라이선스
+
+[MIT](LICENSE) © [CreatiCoding](https://github.com/CreatiCoding)
