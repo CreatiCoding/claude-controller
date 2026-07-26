@@ -12,8 +12,8 @@ import { startAdbReverse } from './adb.js';
 
 const store = new Store({ endedTtlMs: config.endedSessionTtlSeconds * 1000 });
 
-// ---------- 정적 파일 ----------
-const PUBLIC_DIR = path.join(ROOT, 'public');
+// ---------- 정적 파일 (vite 빌드 산출물) ----------
+const PUBLIC_DIR = path.join(ROOT, 'dist');
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.json': 'application/manifest+json',
@@ -28,6 +28,11 @@ function serveStatic(req, res) {
   if (name === '/') name = '/index.html';
   const file = path.join(PUBLIC_DIR, path.normalize(name));
   if (!file.startsWith(PUBLIC_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    if (name === '/index.html') {
+      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('대시보드 빌드가 없습니다 — 리포 루트에서 `yarn build`를 먼저 실행하세요.');
+      return;
+    }
     res.writeHead(404).end('not found');
     return;
   }

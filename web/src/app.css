@@ -1,0 +1,87 @@
+/* claude.ai 다크 톤: 웜 그레이 배경 + 코랄 포인트, 장식 최소화 */
+:root {
+  --bg: #262624; --card: #30302e; --line: #3f3d38;
+  --text: #f0eee6; --dim: #a6a39a; --accent: #d97757;
+  --green: #7fa885; --red: #c46060;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, 'Apple SD Gothic Neo', Roboto, sans-serif;
+  /* 다이나믹 아일랜드(safe-area) 아래로 12px 여유를 더 둔다 */
+  padding: max(20px, calc(env(safe-area-inset-top, 0px) + 12px))
+    max(20px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px))
+    max(20px, env(safe-area-inset-left, 0px));
+}
+/* black-translucent 상태바에서 스크롤 내용이 아일랜드 뒤로 비치는 것 차단 */
+#topcover {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  height: env(safe-area-inset-top, 0px); background: var(--bg);
+}
+body.alert #topcover { animation: bgblink 0.5s steps(1) infinite; }
+/* 허가 대기 중: 밝은 주황으로 빠르게 점멸 — 즉시 알아차리게 */
+body.alert { animation: bgblink 0.5s steps(1) infinite; }
+@keyframes bgblink {
+  0%, 100% { background: var(--bg); }
+  50% { background: #ff6b35; }
+}
+
+header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 28px; }
+h1 { font-family: ui-serif, Georgia, serif; font-size: 22px; font-weight: 500; flex: 1; }
+#conn { width: 8px; height: 8px; border-radius: 50%; background: var(--red); align-self: center; }
+#conn.on { background: var(--green); }
+
+.empty { color: var(--dim); text-align: center; padding: 80px 0; font-size: 15px; line-height: 1.8; }
+
+/* 허가 요청 — 화면의 주인공 */
+.ask {
+  background: var(--card); border: 1px solid var(--accent); border-radius: 16px;
+  padding: 20px; margin-bottom: 16px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 87, 0); }
+  50% { box-shadow: 0 0 0 5px rgba(217, 119, 87, .25); }
+}
+.ask .proj { color: var(--dim); font-size: 13px; margin-bottom: 6px; }
+.ask .q { font-family: ui-serif, Georgia, serif; font-size: 19px; margin-bottom: 14px; }
+.ask pre {
+  font: 13px/1.6 ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--text); background: var(--bg); border-radius: 10px;
+  padding: 12px 14px; white-space: pre-wrap; word-break: break-all;
+  max-height: 160px; overflow-y: auto; margin-bottom: 16px;
+}
+.ask button {
+  display: block; width: 100%; border-radius: 12px; padding: 15px;
+  font-size: 16px; font-weight: 600; margin-top: 10px; touch-action: manipulation;
+  border: 1px solid transparent; background: none; color: var(--text);
+}
+.ask button:active { filter: brightness(1.25); }
+.b-yes { background: var(--accent) !important; color: #fff !important; }
+.b-always { border-color: var(--line) !important; }
+.b-no { color: var(--red) !important; }
+.b-skip {
+  color: var(--dim) !important; font-size: 13px !important;
+  font-weight: 400 !important; padding: 8px !important;
+}
+
+/* 세션 목록 — 한 줄씩, 마지막 메시지는 1줄 말줄임 */
+.session {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 4px; border-bottom: 1px solid var(--line);
+}
+.session .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot.working { background: var(--green); }
+.dot.waiting { background: var(--accent); animation: blink 1s infinite; }
+.dot.input { background: var(--accent); }
+.dot.idle { background: var(--dim); }
+.dot.ended { background: var(--line); }
+@keyframes blink { 50% { opacity: .2; } }
+.session .info { flex: 1; min-width: 0; }
+.session .name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session .last {
+  color: var(--dim); font-size: 13px; margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.session .st { color: var(--dim); font-size: 13px; flex: none; }

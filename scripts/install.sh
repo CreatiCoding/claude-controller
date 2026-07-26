@@ -3,15 +3,22 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "== 1/3 의존성 설치 =="
-npm install
+echo "== 1/4 의존성 설치 (yarn berry) =="
+if ! command -v yarn >/dev/null 2>&1; then
+  corepack enable 2>/dev/null || { echo "yarn이 없습니다 — corepack enable 또는 brew install yarn 후 재실행"; exit 1; }
+fi
+yarn install
 
 echo
-echo "== 2/3 Claude Code hook 등록 (~/.claude/settings.json) =="
+echo "== 2/4 대시보드 빌드 (React → dist/) =="
+yarn build
+
+echo
+echo "== 3/4 Claude Code hook 등록 (~/.claude/settings.json) =="
 node scripts/install-hooks.js
 
 echo
-echo "== 3/3 환경 점검 =="
+echo "== 4/4 환경 점검 =="
 for cmd in tmux adb; do
   if command -v "$cmd" >/dev/null 2>&1; then
     echo "  ✅ $cmd 있음"
@@ -35,7 +42,7 @@ echo
 echo "다음 단계:"
 echo "  1) Karabiner-Elements → Complex Modifications → Add rule → 'claude-controller' 규칙 활성화"
 echo "  2) 폰: USB 디버깅 켜고 USB 연결"
-echo "  3) 데몬 실행: npm start"
+echo "  3) 데몬 실행: yarn start"
 echo "  4) 폰 크롬에서 http://localhost:9200 열기 → 홈 화면에 추가(PWA)"
 echo "  5) ~/.zshrc에 추가: source $(pwd)/shell/cld.sh  →  프로젝트에서 cld로 실행"
 echo "     (tmux는 다이얼 기능에만 필요 — cld가 자동으로 tmux 안에서 claude를 띄움)"
