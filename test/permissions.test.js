@@ -26,8 +26,14 @@ test('Bash: 복합 명령(파이프·체인·리다이렉트·서브셸)은 규�
   }
 });
 
-test('Bash: sudo/env 같은 래퍼는 규칙을 만들지 않는다', () => {
+test('Bash: sudo/env/timeout/npx 같은 래퍼와 uv run 같은 러너는 규칙을 만들지 않는다', () => {
   assert.equal(ruleForRequest(bash('sudo git push')), null);
+  assert.equal(ruleForRequest(bash('timeout 10 npm test')), null);
+  assert.equal(ruleForRequest(bash('doas rm -rf /')), null);
+  assert.equal(ruleForRequest(bash('npx cowsay hi')), null);
+  assert.equal(ruleForRequest(bash('uv run python x.py')), null);
+  assert.equal(ruleForRequest(bash('docker exec c sh')), null);
+  assert.equal(ruleForRequest(bash('uv sync')), 'Bash(uv sync *)', '러너가 아닌 서브명령은 그대로');
   assert.equal(ruleForRequest(bash('env FOO=1 ls')), null);
   assert.equal(ruleForRequest(bash('bash -c ls')), null);
 });

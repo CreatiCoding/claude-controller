@@ -179,6 +179,16 @@ test('CSRF: text/plain simple request와 다른 Origin은 거부, 같은 Origin�
   assert.equal(await rawHost('127.0.0.1'), 403, '포트 생략은 80/443이 아니면 거부');
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{broken')).status, 400);
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"x":"' + 'a'.repeat(1_100_000) + '"}')).status, 413);
+  assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"x":"' + '한'.repeat(400_000) + '"}')).status, 413, '한도는 바이트 기준(한글 40만 자 = 1.2MB)');
+  assert.equal((await raw({ 'Content-Type': 'application/json' }, 'null')).status, 400, '객체가 아닌 JSON은 400');
+  assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"key":true}')).status, 409, '숫자가 아니면 409(강제 변환 없음)');
+  // GET도 같은 검사: DNS 리바인딩 페이지가 /api/state를 폴링하지 못하게
+  const getState = (host) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: PORT, path: '/api/state', method: 'GET', setHost: false, headers: { Host: host } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject); req.end();
+  });
+  assert.equal(await getState(`evil.example:${PORT}`), 403);
+  assert.equal(await getState(`127.0.0.1:${PORT}`), 200);
 });
 
 test('Stop → idle, SessionEnd → ended, 미인식 이벤트는 로그, 세션 없음도 무해', async () => {
@@ -230,18 +240,19 @@ test('hook 이벤트 본문은 8MB까지 허용(대용량 Write content), 초과
   const r = await hook({ hook_event_name: 'Notification', session_id: 'S1', cwd, notification_type: 'other', message: big });
   assert.equal(r.code, 0);
   const shown = (await state()).sessions.find((x) => x.id === 'S1').lastMessage;
-  assert.equal(shown.length, 4000, '표시용 스냅샷은 4000자로 잘린다');
+  assert.ok(shown.startsWith(big.slice(0, 3990)) && /\(\+\d+자\)$/.test(shown), '표시용 스냅샷은 4000자 + 접미사');
   assert.ok(!shown.includes('\uFFFD'), 'UTF-8 청크 경계 깨짐 없음');
-  assert.equal(shown, big.slice(0, 4000));
   const huge = await hook({ hook_event_name: 'PermissionRequest', session_id: 'S1', cwd, tool_name: 'Write', tool_input: { content: 'x'.repeat(9_000_000) } });
   assert.equal(huge.code, 0);
   assert.equal(huge.out, '', '413이면 passthrough');
   assert.match(daemonLog, /\[hook\] 413/);
   // 큰 toolInput은 규칙 생성엔 원본, 스냅샷엔 트리밍
-  const done = permission('Write', { file_path: '/tmp/a', content: 'y'.repeat(100_000) });
+  const done = permission('MultiEdit', { file_path: '/tmp/a', content: 'y'.repeat(100_000), edits: [{ new_string: '🙂'.repeat(5000) }] });
   const p = await waitPending();
   assert.ok(p.toolInput.content.length < 4100);
   assert.match(p.toolInput.content, /\+96000자\)$/);
+  assert.ok(p.toolInput.edits[0].new_string.length < 4100, '중첩 필드도 트리밍');
+  assert.ok(!p.toolInput.edits[0].new_string.includes('\uFFFD') && !/[\uD800-\uDBFF]…/.test(p.toolInput.edits[0].new_string), '서로게이트 쌍 보호');
   await post('/api/respond', { id: p.id, decision: 'deny' });
   await done;
 });
