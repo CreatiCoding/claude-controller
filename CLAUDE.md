@@ -38,8 +38,9 @@
 4. **매크로패드는 맥북에 연결** (폰 아님). 폰은 순수 디스플레이 + 터치 입력.
 5. **"항상 예" 구현** — 데몬이 프로젝트 `.claude/settings.local.json`의
    `permissions.allow`에 규칙 추가 후 allow (규칙 생성은 `src/permissions.js`).
-   복합 명령(`|`, `&&`, `;`, 리다이렉트, 서브셸)과 래퍼 명령(sudo/env/bash -c…)은 규칙을
-   만들지 않고, 규칙 기록에 실패해도 `once`로 강등한다 — "다시 묻지 않기"가 조용히
+   복합 명령(`|`, `&&`, `;`, 리다이렉트, 서브셸), 래퍼 명령(sudo/env/timeout/bash -c…), 임의
+   패키지 실행기(npx/pipx/uvx/bunx), 러너 2토큰(uv run/docker exec/…)은 규칙을 만들지 않고,
+   규칙 기록에 실패해도 `once`로 강등한다 — "다시 묻지 않기"가 조용히
    과도하게 넓어지거나 조용히 무시되는 두 경우를 모두 막기 위해.
 6. **다이얼 기능은 tmux 전제** — 데몬이 `tmux send-keys`로 주입. `shell/cl.sh`의 `cl`
    함수가 tmux를 자동으로 씌운다. tmux 없이도 허가 응답·상태 표시는 전부 동작.
@@ -71,10 +72,10 @@
   working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다.
 - "항상 예" 강등(규칙 없음/기록 실패 → once)은 `respond()` 안에서, 즉 폰에 응답을 돌려주기 전에
   결정한다. hook 응답 쪽에서 나중에 바꾸면 폰은 always, hook은 once를 보는 불일치가 생긴다.
-- POST는 `rejectCrossSite`가 먼저 본다(application/json 강제 + Host/Origin을 "데몬이 열어 둔 주소
-  목록"과 대조). Host와 Origin을 서로 비교하면 DNS 리바인딩으로 뚫리므로 그렇게 바꾸지 말 것.
-  새 POST 라우트를 추가해도 이 검사 뒤에 둘 것. vite dev 프록시는 changeOrigin + Origin 헤더
-  치환으로 이 검사를 통과한다.
+- 모든 요청(GET 정적·/api/state 포함)과 WS 업그레이드는 `crossSiteReason`이 먼저 본다(Host/Origin을
+  "데몬이 열어 둔 주소 목록"과 대조; POST는 추가로 application/json 강제). Host와 Origin을 서로
+  비교하면 DNS 리바인딩으로 뚫리므로 그렇게 바꾸지 말 것. 새 라우트를 추가해도 이 검사 뒤에
+  둘 것. vite dev 프록시는 changeOrigin + Origin 헤더 치환(`/api`·`/ws` 모두)으로 통과한다.
 - 종료된 세션(`endedAt`)에는 `start:` 이벤트 외의 patch를 통째로 무시한다(updatedAt도). 늦은
   이벤트가 "종료됨" 카드를 목록 맨 위로 올리는 것을 막기 위해서다. 예외는 허가 요청 도착
   (`addPending`이 `start:permission`으로 되살림)과 중복 SessionEnd(데몬이 아예 건너뜀).

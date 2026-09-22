@@ -105,7 +105,8 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
    - **예** → hook이 `{"decision":{"behavior":"allow"}}` 출력
    - **항상 예** → 데몬이 해당 프로젝트 `.claude/settings.local.json`의 `permissions.allow`에
      규칙 추가(예: `Bash(git push *)`, `WebFetch(domain:github.com)`) 후 allow.
-     파이프·`&&`·리다이렉트가 섞인 복합 명령이나 `sudo`/`env` 같은 래퍼 명령은 첫 토큰만으로
+     파이프·`&&`·리다이렉트가 섞인 복합 명령, `sudo`/`env`/`timeout` 같은 래퍼 명령, 그리고
+     `npx …`/`uv run …`/`docker exec …`처럼 뒤에 오는 프로그램을 통째로 여는 러너는 프리픽스만으로
      의도를 대표할 수 없어 규칙을 만들지 않고 **1회 승인으로 강등**된다(규칙 기록에 실패한 경우도 같다).
    - **아니오** → `{"behavior":"deny"}`
 4. **타임아웃(기본 300초) 또는 데몬 미실행 시** hook은 아무 출력 없이 종료
@@ -167,15 +168,14 @@ node scripts/uninstall-hooks.js   # ~/.claude/settings.json에서 이 리포의 
 `/api/action`은 실패해도 200 + `{ok:false, error}`, `/api/key`는 실패 시 409, `/api/state`는
 `{sessions, now}`(WS 메시지에만 `type:"state"`가 붙는다).
 
-POST는 `Content-Type: application/json`만 받고(아니면 415), 요청의 `Host`와 (있다면) `Origin`이
+**모든 요청**(GET 정적 페이지·`/api/state`·POST·WebSocket 업그레이드)은 `Host`와 (있다면) `Origin`이
 **데몬이 열어 둔 주소**(`127.0.0.1`, `localhost`, `[::1]`, 테더링 주소, 각각 `:포트` 포함)여야 한다
-(아니면 403 + 데몬 로그에 사유). WebSocket(`/ws`) 업그레이드도 같은 검사를 받는다. 인증이 없는
-승인 API를 브라우저에 열린 다른 사이트가 cross-site나 DNS 리바인딩으로 호출하지 못하게 하는 장치다.
-그래서 `http://mymac.local:9200`처럼 다른 호스트명으로 대시보드를 열면 WebSocket부터 끊겨 세션이
-하나도 안 보인다(빈 화면 + 빨간 접속 점, 데몬 로그에 `[ws] 거부` 반복) — 반드시 위 주소로 접속할 것.
-curl·hook·Karabiner·Hammerspoon은 `127.0.0.1:포트`로 붙으므로 영향 없다. 본문이 JSON이 아니면 400,
-API는 1MB·`/hook/event`는 8MB를 넘으면 413. 폰 화면은 응답 실패 시 상단에 빨간 띠로 상태 코드를
-5초간 보여준다.
+(아니면 403 + 데몬 로그에 사유). POST는 추가로 `Content-Type: application/json`만 받는다(아니면 415).
+인증이 없는 승인 API와 세션 스냅샷을 브라우저에 열린 다른 사이트가 cross-site나 DNS 리바인딩으로
+호출·열람하지 못하게 하는 장치다. 그래서 `http://mymac.local:9200`처럼 다른 호스트명으로 대시보드를
+열면 페이지 자체가 403 JSON으로 끝난다 — 반드시 위 주소로 접속할 것. curl·hook·Karabiner·Hammerspoon은
+`127.0.0.1:포트`로 붙으므로 영향 없다. 본문이 JSON 객체가 아니면 400, API는 1MB·`/hook/event`는
+8MB(바이트)를 넘으면 413. 폰 화면은 응답 실패 시 상단에 빨간 띠로 상태 코드를 5초간 보여준다.
 
 ## 문제 해결
 
