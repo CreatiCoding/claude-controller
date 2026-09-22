@@ -11,7 +11,9 @@ const HELP = `claude-controller — 폰으로 Claude Code 허가에 응답하는
 
 사용법: claude-controller <명령>
 
-  doctor           새 환경에서 동작할지 진단 (node·claude CLI·hook 등록·데몬·hook 왕복·폰 연결 경로)
+  doctor           새 환경에서 동작할지 진단 (node·claude CLI·hook 등록·데몬·hook 왕복·폰 연결 경로·로그)
+                   --fix  고칠 수 있는 것은 고친다(백업 생성): hook 재등록, rc의 옛 cl.sh → ccode.sh,
+                          Karabiner 규칙 복사, dist 빌드. 데몬 실행은 하지 않는다
                    --json 으로 기계가 읽을 결과 출력. 실패가 있으면 종료 코드 1
   start            데몬 실행 (포트 9200, config.json으로 변경)
   install-hooks    ~/.claude/settings.json 에 hook 등록 (+ Karabiner 규칙 복사)

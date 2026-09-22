@@ -38,7 +38,7 @@ claude-controller doctor          # 새 환경에서 잘 될지 진단
 
 | 명령 | 하는 일 |
 | --- | --- |
-| `claude-controller doctor [--json]` | 새 환경 진단(아래 표). 실패가 있으면 종료 코드 1 |
+| `claude-controller doctor [--fix] [--json]` | 새 환경 진단(아래 표). `--fix`면 고칠 수 있는 것은 고치고 다시 검사. 실패가 있으면 종료 코드 1 |
 | `claude-controller start` | 데몬 실행 (`Ctrl-C`로 종료) |
 | `claude-controller install-hooks` | `~/.claude/settings.json`에 hook 등록 + Karabiner 규칙 복사. 재실행하면 갱신 |
 | `claude-controller uninstall-hooks` | 이 도구의 hook만 제거 |
@@ -62,7 +62,13 @@ claude-controller doctor          # 새 환경에서 잘 될지 진단
 | 데몬 | `127.0.0.1:포트` 응답 여부, 포트를 다른 프로세스가 점유했는지 |
 | hook → 데몬 왕복 | 실제 hook-handler로 SessionStart를 보내 데몬에 도착하는지 (자동으로 정리) |
 | 폰 연결 경로 | Wi-Fi 인터페이스 식별(제외 대상), 아이폰 테더링 인터페이스 감지(Wi-Fi에만 있으면 경고), adb 기기 |
-| 선택 도구 | tmux, Karabiner 규칙 복사 여부, rc 파일의 `ccode.sh` source |
+| 선택 도구 | tmux, Karabiner 규칙 복사 여부, rc 파일의 `ccode.sh` source(옛 `cl.sh`를 source하는 줄이 남아 있으면 경고) |
+| 로그 | `daemon.log`·`hook.log`의 최근 300줄 중 경고/오류 건수와 마지막 오류 |
+
+**`doctor --fix`** 는 되돌릴 수 있는 것만 자동으로 고친다(고친 파일은 `*.claude-controller.bak`으로 백업). hook 미등록·hook 명령의
+node 경로 소멸·handler 복사본 오래됨·포트 불일치·타임아웃 부족 → hook 재등록, rc 파일의 옛 `cl.sh` → `ccode.sh`
+(같은 폴더에 `ccode.sh`가 없으면 현재 리포 경로로), Karabiner 규칙 미복사 → 복사, `dist/` 없음 → 빌드(`node_modules`가 있을 때).
+데몬 실행처럼 오래 도는 프로세스는 띄우지 않는다. 고친 뒤 검사를 다시 돌려 결과를 보여준다.
 
 ## 준비하기 (리포로 쓸 때, 처음 한 번만 5분)
 
@@ -137,7 +143,7 @@ ccode                     # ② 작업할 프로젝트 폴더에서 Claude Code 
 ```bash
 yarn dev      # 개발 서버(5173) — /api, /ws 는 로컬 데몬(9200)으로 프록시
 yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 재빌드 필요)
-yarn test     # node --test 43개: 규칙 생성·상태 저장소 단위, 데몬을 임의 포트로 띄운 hook 왕복, CLI·doctor(격리 HOME), 로그
+yarn test     # node --test 44개: 규칙 생성·상태 저장소 단위, 데몬을 임의 포트로 띄운 hook 왕복, CLI·doctor(격리 HOME), 로그
 yarn doctor   # = node bin/claude-controller.js doctor
 ```
 

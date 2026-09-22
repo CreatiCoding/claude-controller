@@ -34,7 +34,7 @@ test('help / 알 수 없는 명령', () => {
 test('doctor: 데몬 없음 → 경고, hook 미등록 → 실패(exit 1), --json 출력', () => {
   const r = run(['doctor', '--json']);
   assert.equal(r.status, 1);
-  const checks = JSON.parse(r.stdout);
+  const checks = JSON.parse(r.stdout).checks;
   const byName = Object.fromEntries(checks.map((c) => [c.name, c]));
   assert.equal(byName['Node.js'].status, 'ok');
   assert.equal(byName['Claude Code hook 등록'].status, 'fail');
@@ -43,7 +43,8 @@ test('doctor: 데몬 없음 → 경고, hook 미등록 → 실패(exit 1), --jso
 });
 
 test('install-hooks --copy: handler를 ~/.claude-controller/에 복사하고 기존 hook 보존, 재실행 시 중복 없음', () => {
-  const r = run(['install-hooks', '--copy']);
+  // 일부러 9200으로 등록 — 뒤의 doctor 테스트가 env 포트(PORT)와의 불일치를 잡는지 본다
+  const r = run(['install-hooks', '--copy'], { CLAUDE_CONTROLLER_PORT: '9200' });
   assert.equal(r.status, 0, r.stderr);
   const copied = path.join(HOME, '.claude-controller', 'hook-handler.js');
   assert.ok(fs.existsSync(copied));
@@ -56,7 +57,7 @@ test('install-hooks --copy: handler를 ~/.claude-controller/에 복사하고 기
   assert.equal(ours.length, 1);
   assert.ok(ours[0].command.includes(copied));
   assert.equal(ours[0].timeout, 3600);
-  run(['install-hooks', '--copy']);
+  run(['install-hooks', '--copy'], { CLAUDE_CONTROLLER_PORT: '9200' });
   const s2 = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
   assert.equal(s2.hooks.PermissionRequest.flatMap((g) => g.hooks).filter((h) => h.command.includes('hook-handler.js')).length, 1, '재실행해도 1개');
 });
@@ -67,7 +68,7 @@ test('doctor: 데몬 실행 중이면 hook 왕복까지 통과, hook 포트 불�
     daemon.stdout.on('data', (d) => { if (String(d).includes('대기 중')) resolve(); });
     setTimeout(() => reject(new Error('daemon start timeout')), 5000);
   });
-  const checks = JSON.parse(run(['doctor', '--json']).stdout);
+  const checks = JSON.parse(run(['doctor', '--json']).stdout).checks;
   const byName = Object.fromEntries(checks.map((c) => [c.name, c]));
   assert.equal(byName['데몬(127.0.0.1)'].status, 'ok');
   assert.equal(byName['hook → 데몬 왕복'].status, 'ok');
@@ -76,7 +77,7 @@ test('doctor: 데몬 실행 중이면 hook 왕복까지 통과, hook 포트 불�
   assert.equal(byName['hook-handler 최신 여부'].status, 'ok');
   // 복사본이 오래되면 경고
   fs.appendFileSync(path.join(HOME, '.claude-controller', 'hook-handler.js'), '\n// stale\n');
-  const again = Object.fromEntries(JSON.parse(run(['doctor', '--json']).stdout).map((c) => [c.name, c]));
+  const again = Object.fromEntries(JSON.parse(run(['doctor', '--json']).stdout).checks.map((c) => [c.name, c]));
   assert.equal(again['hook-handler 최신 여부'].status, 'warn');
   // doctor가 만든 세션은 종료 처리돼 있어야 한다
   const st = await (await fetch(`http://127.0.0.1:${PORT}/api/state`)).json();
@@ -85,7 +86,7 @@ test('doctor: 데몬 실행 중이면 hook 왕복까지 통과, hook 포트 불�
 
 test('~/.claude-controller/config.json의 port를 hook 명령에 반영', () => {
   fs.writeFileSync(path.join(HOME, '.claude-controller', 'config.json'), JSON.stringify({ port: 19999 }));
-  run(['install-hooks', '--copy']);
+  run(['install-hooks', '--copy'], { CLAUDE_CONTROLLER_PORT: '' }); // env 미설정 상황
   const s = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
   const ours = s.hooks.PermissionRequest.flatMap((g) => g.hooks).find((h) => h.command.includes('hook-handler.js'));
   assert.match(ours.command, /^CLAUDE_CONTROLLER_PORT=19999 /);
@@ -109,12 +110,41 @@ test('logs: 데몬·hook 로그 끝부분을 보여주고, doctor가 로그 경�
   assert.match(r.stdout, /===== .*hook\.log/);
   const only = run(['logs', '--hook']);
   assert.ok(!/daemon\.log/.test(only.stdout));
-  const checks = JSON.parse(run(['doctor', '--json']).stdout);
+  const checks = JSON.parse(run(['doctor', '--json']).stdout).checks;
   const logChecks = checks.filter((c) => c.name.startsWith('로그 '));
   assert.equal(logChecks.length, 2);
   // hook.log 는 실패·허가 결정만 기록하므로 doctor 왕복(SessionStart 성공)만으로는 생기지 않을 수 있다 → info 허용
   assert.ok(logChecks.every((c) => ['ok', 'warn', 'info'].includes(c.status)));
   assert.equal(logChecks.find((c) => c.name === '로그 daemon.log').status, 'ok');
+});
+
+test('doctor --fix: 옛 cl.sh source 줄을 ccode.sh로 고치고(백업), 빠진 hook을 재등록한 뒤 다시 검사한다', () => {
+  const zshrc = path.join(HOME, '.zshrc');
+  fs.writeFileSync(zshrc, `export FOO=1\nsource ${ROOT}/shell/cl.sh\nalias x=y\n`);
+  // uninstall-hooks 테스트 뒤라 hook은 빠져 있는 상태
+  const before = JSON.parse(run(['doctor', '--json']).stdout).checks;
+  const b = Object.fromEntries(before.map((c) => [c.name, c]));
+  assert.equal(b['ccode 셸 함수'].status, 'warn');
+  assert.equal(b['ccode 셸 함수'].fixable, true);
+  assert.equal(b['Claude Code hook 등록'].fixable, true);
+  const plain = run(['doctor']).stdout;
+  assert.match(plain, /doctor --fix/, '--fix 안내');
+
+  const out = JSON.parse(run(['doctor', '--fix', '--json']).stdout);
+  assert.ok(out.applied.some((a) => a.name === 'ccode 셸 함수' && !a.error), JSON.stringify(out.applied));
+  assert.ok(out.applied.some((a) => a.name === 'Claude Code hook 등록' && /재등록/.test(a.result)));
+  assert.equal(fs.readFileSync(zshrc, 'utf8'), `export FOO=1\nsource ${ROOT}/shell/ccode.sh\nalias x=y\n`, '해당 줄만 바뀜');
+  assert.ok(fs.existsSync(zshrc + '.claude-controller.bak'));
+  const after = Object.fromEntries(out.checks.map((c) => [c.name, c]));
+  assert.equal(after['ccode 셸 함수'].status, 'ok');
+  assert.equal(after['Claude Code hook 등록'].status, 'ok');
+  // 두 번째 --fix 는 고칠 게 없어야 한다
+  const again = JSON.parse(run(['doctor', '--fix', '--json']).stdout);
+  assert.equal(again.applied.length, 0);
+  // 리포가 옮겨져 같은 폴더에 ccode.sh가 없으면 현재 리포의 ccode.sh로 바꾼다
+  fs.writeFileSync(zshrc, 'source /old/place/shell/cl.sh\n');
+  run(['doctor', '--fix']);
+  assert.equal(fs.readFileSync(zshrc, 'utf8'), `source ${ROOT}/shell/ccode.sh\n`);
 });
 
 test('shell-init은 ccode 함수를 출력한다', () => {

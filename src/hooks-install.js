@@ -39,6 +39,9 @@ export function resolveHandlerPath({ copy = isEphemeralInstall() } = {}) {
 }
 
 export function readConfigPort() {
+  // 데몬(config.js)과 같은 우선순위: 환경변수 → 리포 config.json → ~/.claude-controller/config.json → 9200
+  const envPort = Number(process.env.CLAUDE_CONTROLLER_PORT);
+  if (Number.isInteger(envPort) && envPort > 0) return envPort;
   for (const p of [path.join(ROOT, 'config.json'), path.join(HOME_DIR, 'config.json')]) {
     try {
       const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
