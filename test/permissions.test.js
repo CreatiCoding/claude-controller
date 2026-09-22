@@ -17,8 +17,12 @@ test('Bash: 일반 명령은 첫 토큰, 앞쪽 env 대입은 무시', () => {
   assert.equal(ruleForRequest(bash('ls -la')), 'Bash(ls *)');
   assert.equal(ruleForRequest(bash('FOO=1 BAR=2 make test')), 'Bash(make test *)');
   assert.equal(ruleForRequest(bash('make VERBOSE=1 test')), 'Bash(make VERBOSE=1 *)', '중간 KEY=val은 인자로 취급');
-  assert.equal(ruleForRequest(bash('git -C /x status')), null, '옵션이 서브명령 앞에 오면 규칙 없음(Bash(git *)는 너무 넓다)');
+  assert.equal(ruleForRequest(bash('git -C /x status')), 'Bash(git *)', '러너가 없는 명령은 옵션 선행이어도 1토큰 규칙');
+  assert.equal(ruleForRequest(bash('make -j4 test')), 'Bash(make *)');
   assert.equal(ruleForRequest(bash('git')), 'Bash(git *)');
+  assert.equal(ruleForRequest(bash('docker')), null, '러너를 가진 명령의 단독 호출은 광역 규칙을 만들지 않는다');
+  assert.equal(ruleForRequest(bash('uv')), null);
+  assert.equal(ruleForRequest({ toolName: 'Bash', toolInput: {} }), null, 'command 없는 Bash는 규칙 없음(도구 전체 허용 방지)');
 });
 
 test('Bash: 복합 명령(파이프·체인·리다이렉트·서브셸)은 규칙을 만들지 않는다', () => {
@@ -42,6 +46,7 @@ test('Bash: sudo/env/timeout/npx 같은 래퍼와 uv run 같은 러너는 규칙
   assert.equal(ruleForRequest(bash('bun x cowsay')), null);
   assert.equal(ruleForRequest(bash('bun install')), 'Bash(bun install *)');
   assert.equal(ruleForRequest(bash('bun run dev')), 'Bash(bun run *)', 'npm run과 대칭');
+  assert.equal(ruleForRequest(bash('yarn run build')), 'Bash(yarn run *)');
   // 옵션이 서브명령 앞에 오면 러너 우회가 아니라 규칙 없음
   for (const c of ['kubectl -n default exec -it pod -- bash', 'docker -H unix:///x exec c sh', 'uv -q run python evil.py', 'npm --prefix x exec -- cowsay']) {
     assert.equal(ruleForRequest(bash(c)), null, c);

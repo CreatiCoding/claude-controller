@@ -21,13 +21,18 @@ const RUNNER_PAIRS = new Set([
   'uv run', 'uv tool', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
   'bun x', 'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
 ]);
+// 러너 서브명령을 가진 명령들. 이들은 1토큰 광역 규칙(`Bash(docker *)`)이 러너를 통째로 열므로,
+// 단독 호출이나 옵션 선행처럼 2토큰 규칙을 못 만드는 경우 규칙을 만들지 않는다.
+const RUNNER_CMDS = new Set([...RUNNER_PAIRS].map((p) => p.split(' ')[0]));
 
 /** 허가 요청 페이로드로부터 permissions.allow 규칙 문자열을 만든다. 못 만들면 null. */
 export function ruleForRequest({ toolName, toolInput, permissionType }) {
   const tool = toolName || permissionType;
   if (!tool || tool === 'unknown') return null;
 
-  if (tool === 'Bash' && toolInput?.command) {
+  if (tool === 'Bash') {
+    // command가 없는 Bash 요청(스키마 변동 등)에 도구명 규칙 `Bash`를 내면 모든 Bash가 열린다
+    if (!toolInput?.command) return null;
     const command = String(toolInput.command).trim();
     // 파이프·체인·리다이렉트·서브셸이 섞인 복합 명령은 첫 토큰만으로 의도를 대표할 수 없다
     // (예: `cd x && git push` → `Bash(cd *)`가 되면 cd로 시작하는 모든 명령이 열린다). 1회 승인으로 강등.
@@ -44,11 +49,13 @@ export function ruleForRequest({ toolName, toolInput, permissionType }) {
     if (WRAPPER_CMDS.has(words[0])) return null;
     let prefix = words[0];
     if (SUBCOMMAND_CMDS.has(words[0])) {
-      // 옵션이 서브명령 앞에 오면(`kubectl -n x exec …`) 2토큰 규칙을 만들 수 없고, `Bash(kubectl *)`는
-      // 차단하려던 `kubectl exec *`보다 넓다 → 규칙 없음. 서브명령은 첫 비옵션 토큰으로 본다.
       const sub = words[1];
-      if (!sub) return `Bash(${prefix} *)`;
-      if (sub.startsWith('-')) return null;
+      if (!sub || sub.startsWith('-')) {
+        // 단독 호출(`docker`)이나 옵션 선행(`kubectl -n x exec …`, `git -C /x status`)은 2토큰 규칙을
+        // 못 만든다. 1토큰 규칙 `Bash(<명령> *)`가 러너(docker exec, uv run…)를 통째로 여는 명령이면
+        // 규칙 없음, 러너가 없는 명령(git/make/brew…)은 1토큰 규칙으로 허용한다.
+        return RUNNER_CMDS.has(words[0]) ? null : `Bash(${prefix} *)`;
+      }
       prefix = `${words[0]} ${sub}`;
       if (RUNNER_PAIRS.has(prefix)) return null;
     }
