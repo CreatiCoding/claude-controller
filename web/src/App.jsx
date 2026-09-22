@@ -27,9 +27,12 @@ const respond = async (id, decision) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, decision }),
     });
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       showError(`응답 실패 ${res.status}: ${body.error ?? ''}`);
+    } else if (body.ok && decision === 'always' && body.decision === 'once') {
+      // 규칙을 못 만들거나 기록에 실패해 1회 승인으로 강등됨 — 다음에 또 묻는 이유를 알려준다
+      showError('규칙을 만들 수 없는 명령이라 이번 1회만 승인했습니다 (다음에 다시 묻습니다)');
     }
   } catch (e) {
     showError(`응답 실패: ${e.message}`);
