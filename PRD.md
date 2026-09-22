@@ -117,7 +117,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | ID | 요구사항 | 상태 |
 | --- | --- | --- |
 | N-1 | **Fail-open**: 데몬 미실행, 타임아웃, 파싱 실패, non-2xx 응답 등 어떤 장애에서도 hook은 무출력 종료(exit 0)하여 Claude Code 기본 동작에 간섭하지 않는다 | 구현·검증 |
-| N-2 | **보안**: 승인 API에 인증이 없으므로 루프백과 폰 USB 테더링 대역 외에는 바인딩하지 않는다. Wi-Fi 인터페이스는 대역이 맞아도 제외. `0.0.0.0` 설정 시 경고. **CSRF 방어**: 모든 POST는 `Content-Type: application/json`이어야 하고(아니면 415, preflight 없는 text/plain simple request 차단), 요청의 `Host`와 (있다면) `Origin`의 host가 모두 **허용 목록**(루프백 별칭 `127.0.0.1`·`localhost`·`[::1]` + 현재 listen 중인 테더링 주소 + 고정 `host`; `host:'0.0.0.0'`이면 이 머신의 모든 IPv4; 각각 `:port` 포함, 80/443이면 포트 생략형도)에 있어야 한다(아니면 403 + 데몬 로그에 사유). 요청의 Host 헤더와 Origin을 서로 비교하는 방식은 DNS 리바인딩(evil.example → 127.0.0.1)으로 둘을 같게 만들 수 있어 쓰지 않는다. `Origin: null`과 파싱 불가 Origin도 403 — 맥 브라우저나 adb reverse된 폰 브라우저에 열린 임의 사이트가 루프백으로 승인 요청을 쏘는 경로를 막는다. 요청 본문 1MB 제한(413). 정적 파일은 `dist/` 밖 경로 탈출 차단(구분자 포함 검사) | 구현·검증(CSRF·413·400 테스트) |
+| N-2 | **보안**: 승인 API에 인증이 없으므로 루프백과 폰 USB 테더링 대역 외에는 바인딩하지 않는다. Wi-Fi 인터페이스는 대역이 맞아도 제외. `0.0.0.0` 설정 시 경고. **CSRF 방어**: 모든 POST는 `Content-Type: application/json`이어야 하고(아니면 415, preflight 없는 text/plain simple request 차단), 모든 POST와 **WebSocket 업그레이드**(`/ws`, 동일 출처 정책이 없어 임의 사이트가 스냅샷을 읽을 수 있음)는 요청의 `Host`와 (있다면) `Origin`의 host가 모두 **허용 목록**(루프백 별칭 `127.0.0.1`·`localhost`·`[::1]` + 현재 listen 중인 테더링 주소 + 고정 `host`; `host:'0.0.0.0'`이면 이 머신의 모든 IPv4; 각각 `:port` 포함, 80/443이면 포트 생략형도)에 있어야 한다(아니면 403 + 데몬 로그에 사유). 요청의 Host 헤더와 Origin을 서로 비교하는 방식은 DNS 리바인딩(evil.example → 127.0.0.1)으로 둘을 같게 만들 수 있어 쓰지 않는다. `Origin: null`과 파싱 불가 Origin도 403 — 맥 브라우저나 adb reverse된 폰 브라우저에 열린 임의 사이트가 루프백으로 승인 요청을 쏘는 경로를 막는다. 요청 본문 제한: API는 1MB, `/hook/event`는 8MB(Write/NotebookEdit의 content 전문 대비), 초과 시 413. 정적 파일은 `dist/` 밖 경로 탈출 차단(구분자 포함 검사) | 구현·검증(CSRF·WS 거부·413·400 테스트; `0.0.0.0` 전체 IPv4와 80/443 포트 생략 분기는 코드 확인) |
 | N-3 | **네트워크 독립**: 폰-맥 통신은 USB 터널(iOS 테더링 인터페이스 / adb reverse)만 사용. 감지는 IP 프리픽스 기준이라 N-2의 Wi-Fi 제외로 보완한다 | 구현 |
 | N-4 | **팀 영향 없음**: "항상 예" 규칙은 gitignore 대상인 `settings.local.json`에만 기록 | 구현·검증 |
 | N-5 | **최소 의존성**: 런타임 의존성은 `ws` 하나. tmux·adb·Karabiner/Hammerspoon은 선택. 대시보드는 tmux 없이도 동작(문구도 그렇게 안내) | 구현 |
@@ -130,7 +130,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | --- | --- | --- |
 | Claude Code hook | Claude → 데몬 | `PermissionRequest`, `Stop`, `Notification`, `SessionStart`, `SessionEnd`. `bin/hook-handler.js`가 stdin JSON + `$TMUX_PANE`을 `POST /hook/event`로 전달. 포트는 `CLAUDE_CONTROLLER_PORT`(기본 9200), 호스트는 127.0.0.1 고정 |
 | hook 출력 | 데몬 → Claude | `hookSpecificOutput.decision.behavior: allow \| deny`(deny는 `message` 포함) 또는 무출력 |
-| `GET /ws` | 데몬 → 폰 | `{type:"state", sessions, now}` 스냅샷. `/ws` 외 경로 업그레이드는 소켓 파기 |
+| `GET /ws` | 데몬 → 폰 | `{type:"state", sessions, now}` 스냅샷. `/ws` 외 경로 업그레이드는 소켓 파기. Host/Origin 허용 목록 검사(POST와 동일, 실패 시 403 후 파기) |
 | `GET /api/state` | 폰 → 데몬 | `{sessions, now}` (`type` 없음) |
 | 세션 스키마 | — | `id, cwd, status(working\|waiting\|input\|idle\|ended), model, thinking, hasTmux, lastEvent, lastMessage, startedAt, updatedAt, pending[{id, toolName, toolInput, permissionType, createdAt}]` |
 | `POST /api/respond` | 폰 → 데몬 | `{id, decision: once\|always\|deny\|passthrough}` → 200 `{ok, decision, rule}`(always가 once로 강등되면 여기서부터 once); decision 값 오류 400 |
@@ -162,7 +162,10 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - **Stop 뒤 남은 요청이 해소되면** `idle → working`으로 돌아간다(다음 Stop까지).
 - **`modelCycle`을 빈 배열로 두면** 모델 순환은 `{ok:false}`. 배열은 통째로 교체되므로 최소 한 항목은 남길 것.
 - **다른 호스트명으로 대시보드를 열면**(`mymac.local:9200` 등) 허용 목록 밖이라 모든 POST가 403. 폰 화면 상단에 빨간 띠로 5초간 표시되고 데몬 로그에 사유가 남는다. `host:'0.0.0.0'`은 이 머신의 IPv4를 전부 허용하지만 호스트명은 여전히 불가.
-- **POST 실패 시 폰 표시**: `/api/respond` 실패(403/500/네트워크)는 상단 오류 띠로 알리고 카드는 남는다. 다시 누르면 재시도.
+- **POST 실패 시 폰 표시**: `/api/respond` 실패(403/500/네트워크)는 상단 오류 띠로 알리고 카드는 남는다. 다시 누르면 재시도. 더블탭·이미 처리된 요청은 200 `{ok:false}`라 띠 없이 카드만 사라진다.
+- **hook 페이로드가 8MB를 넘으면**(초대형 Write content) 413 → hook은 무출력 종료 → 폰에 안 뜨고 터미널 프롬프트로 간다. 데몬 로그에는 남지 않는다(hook-handler가 조용히 종료).
+- **adb도 PATH 의존**: 데몬 PATH에 adb가 없으면 "찾지 못함"으로 판정하고 재시도를 영구 중단한다(tmux는 호출마다 실패). launchd 등 축소 PATH로 띄웠다면 PATH를 넓혀 재시작.
+- **종료 세션이 허가 요청으로 되살아날 때** 새 `cwd`·`tmuxPane`으로 갱신된다(pane이 바뀐 resume에서 다이얼이 죽은 pane으로 가지 않도록).
 - **config.json의 `port`가 문자열이면** 데몬은 그 포트로 뜨지만 install-hooks는 정수만 인식해 hook을 9200으로 등록한다 → 정수로 적을 것.
 - **Wi-Fi 포트명이 "Wi-Fi"/"AirPort"가 아니면** 제외 실패를 경고로 알리므로 `excludeInterfaces`에 인터페이스 이름을 직접 적는다. `host`가 `auto`가 아니면 networksetup을 실행하지 않는다.
 - **hook에 박힌 node 절대경로**가 사라지면(nvm 버전 삭제 등) hook은 조용히 실패(fail-open)한다 → `install-hooks.js` 재실행.
@@ -170,12 +173,12 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 
 ## 9. 검증 (2026-09-22)
 
-- **자동 테스트** `yarn test` 28개: 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
+- **자동 테스트** `yarn test` 30개: 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
 - **실기기 엔드투엔드 ×2**: 실제 Claude Code 세션(`claude -p`)에서 Bash 허가 요청이 5초 내 데몬에 도착 → API 응답 → 명령 실행·정상 종료. 1회차는 프로젝트 스코프 hook, 2회차는 `install.sh`가 등록한 **사용자 스코프 hook 그대로**, "항상 예"로 `Bash(touch *)` 규칙 기록까지 확인.
 - **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주.
 - **테스트로 잡은 버그**: 종료 시 남은 허가 요청을 정리하면 상태가 `working`으로 되돌아가던 문제(정리 순서) 수정.
 - **미검증**(실기기·환경 필요): 아이폰 USB 테더링 인터페이스 실제 감지, Wi-Fi 제외의 실제 동작, tmux 다이얼 주입(성공 경로), 안드로이드 adb reverse(연결 경로), iOS Wake Lock·PWA 동작, WebSocket 백오프 재접속.
-- **2~4차 감사 반영분**: `yarn test` 28개 통과. DNS 리바인딩 Host 위조는 `fetch()`가 Host 헤더를 버리므로 `node:http` + `setHost:false`로 실제 헤더를 보내 검증(evil.example 403, LOCALHOST·[::1] 통과, 포트 생략 403). `Origin: null` 거부, 쓰기 예외 강등, 종료 세션 늦은 이벤트 완전 무시, 중복 SessionEnd 불변, 종료 세션 허가 요청 소생, resume 후 재종료 TTL 포함. `yarn build` 성공 확인(2026-09-22).
+- **2~5차 감사 반영분**: `yarn test` 30개 통과(WebSocket Origin 거부, hook 본문 8MB·초과 passthrough, 소생 시 cwd/pane 갱신 포함). DNS 리바인딩 Host 위조는 `fetch()`가 Host 헤더를 버리므로 `node:http` + `setHost:false`로 실제 헤더를 보내 검증(evil.example 403, LOCALHOST·[::1] 통과, 포트 생략 403). `Origin: null` 거부, 쓰기 예외 강등, 종료 세션 늦은 이벤트 완전 무시, 중복 SessionEnd 불변, 종료 세션 허가 요청 소생, resume 후 재종료 TTL 포함. `yarn build` 성공 확인(2026-09-22).
 
 ## 10. 리스크
 
