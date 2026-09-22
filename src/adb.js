@@ -9,7 +9,7 @@ export function startAdbReverse(port, intervalSeconds = 30) {
     execFile('adb', ['reverse', `tcp:${port}`, `tcp:${port}`], { timeout: 10_000 }, (err, _out, stderr) => {
       if (err?.code === 'ENOENT') {
         // adb 자체가 없음 = 안드로이드 미사용(아이폰 등). 조용히 종료.
-        console.log('[adb] adb 미설치 — 안드로이드 폰을 쓰지 않으면 무시하세요 (아이폰은 USB 테더링 자동 감지)');
+        console.log('[adb] adb를 찾지 못함(PATH에 없음) — 안드로이드 폰을 쓰지 않으면 무시하세요 (아이폰은 USB 테더링 자동 감지). launchd 등 축소된 PATH로 데몬을 띄웠다면 PATH를 넓혀 재시작');
         clearInterval(timer);
         return;
       }

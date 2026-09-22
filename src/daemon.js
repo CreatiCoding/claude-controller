@@ -46,17 +46,17 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-function readJson(req) {
+function readJson(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     let body = '';
     let tooLarge = false;
     req.on('data', (c) => {
       if (tooLarge) return; // 나머지는 읽어서 버린다 (소켓을 끊으면 413 응답이 못 나간다)
       body += c;
-      if (body.length > 1_000_000) { tooLarge = true; body = ''; }
+      if (body.length > limit) { tooLarge = true; body = ''; }
     });
     req.on('end', () => {
-      if (tooLarge) return reject(new HttpError(413, '요청 본문이 1MB를 넘음'));
+      if (tooLarge) return reject(new HttpError(413, `요청 본문이 ${Math.round(limit / 1_000_000)}MB를 넘음`));
       try { resolve(body ? JSON.parse(body) : {}); } catch { reject(new HttpError(400, '본문이 JSON이 아님')); }
     });
     req.on('error', reject);
@@ -88,28 +88,34 @@ function allowedHosts() {
   return hosts;
 }
 
+// Host/Origin이 허용 목록 밖이면 사유 문자열, 아니면 null. POST와 WebSocket 업그레이드가 공유한다.
+function crossSiteReason(req) {
+  const hosts = allowedHosts();
+  const host = String(req.headers.host ?? '').toLowerCase();
+  const origin = req.headers.origin;
+  if (!hosts.has(host)) return `허용되지 않은 Host: ${host || '(없음)'}`;
+  if (origin) {
+    let oh = null;
+    try { oh = new URL(origin).host.toLowerCase(); } catch { /* 'null' 등 파싱 불가 */ }
+    if (oh === null) return `Origin 형식 오류: ${origin}`;
+    if (!hosts.has(oh)) return `허용되지 않은 Origin: ${origin}`;
+  }
+  return null;
+}
+
 function rejectCrossSite(req) {
   const ct = String(req.headers['content-type'] ?? '');
   if (!ct.toLowerCase().startsWith('application/json')) {
     throw new HttpError(415, 'Content-Type은 application/json이어야 함');
   }
-  const hosts = allowedHosts();
-  const host = String(req.headers.host ?? '').toLowerCase();
-  const origin = req.headers.origin;
-  let reason = null;
-  if (!hosts.has(host)) reason = `허용되지 않은 Host: ${host || '(없음)'}`;
-  else if (origin) {
-    let oh = null;
-    try { oh = new URL(origin).host.toLowerCase(); } catch { /* 'null' 등 파싱 불가 */ }
-    if (oh === null) reason = `Origin 형식 오류: ${origin}`;
-    else if (!hosts.has(oh)) reason = `허용되지 않은 Origin: ${origin}`;
-  }
+  const reason = crossSiteReason(req);
   if (reason) {
-    // 폰 대시보드는 실패를 표시하지 않으므로, "버튼이 안 먹는" 원인을 로그로는 반드시 남긴다
+    // 폰 대시보드의 오류 띠는 5초면 사라지므로, 원인은 데몬 로그에도 남긴다
     console.warn(`[http] 403 ${req.url} — ${reason} (다른 호스트명으로 열었다면 127.0.0.1/테더링 주소로 접속하세요)`);
     throw new HttpError(403, reason);
   }
 }
+
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
@@ -117,8 +123,12 @@ function json(res, code, obj) {
 }
 
 // ---------- hook 이벤트 처리 ----------
+// hook 페이로드는 Write/NotebookEdit의 content 전문을 담을 수 있어 한도를 넉넉히 둔다.
+// 넘으면 413 → hook-handler는 무출력 종료(passthrough)라 폰에 안 뜨고 터미널 프롬프트로 간다.
+const HOOK_BODY_LIMIT = 8_000_000;
+
 async function handleHookEvent(req, res) {
-  const { payload = {}, tmuxPane = null } = await readJson(req);
+  const { payload = {}, tmuxPane = null } = await readJson(req, HOOK_BODY_LIMIT);
   const event = payload.hook_event_name;
   const sid = payload.session_id;
   if (!sid) {
@@ -157,11 +167,12 @@ async function handleHookEvent(req, res) {
 
     case 'PermissionRequest': {
       // 응답 대기형: 폰/매크로패드의 결정이 올 때까지 이 HTTP 응답을 잡아둔다.
-      store.upsertSession(sid, { ...base, lastEvent: 'permission' });
       let timer;
       let pendingId;
       const wait = new Promise((resolve) => {
-        const pending = store.addPending({ sessionId: sid, payload, resolve });
+        // cwd/tmuxPane도 함께 넘긴다 — 종료로 표시된 세션을 되살리는 경우 새 pane/cwd로 갱신돼야
+        // 다이얼이 죽은 pane으로 가지 않는다
+        const pending = store.addPending({ sessionId: sid, payload, resolve, ...base });
         pendingId = pending.id;
         console.log(`[perm] 대기: ${pending.toolName} ${summarizeInput(pending.toolInput)} (${sid.slice(0, 8)})`);
         timer = setTimeout(
@@ -314,6 +325,13 @@ const requestHandler = async (req, res) => {
 const wss = new WebSocketServer({ noServer: true });
 const upgradeHandler = (req, socket, head) => {
   if (new URL(req.url, 'http://x').pathname !== '/ws') return socket.destroy();
+  // WebSocket은 동일 출처 정책이 없어 임의 사이트가 스냅샷(cwd·대기 중 명령)을 읽을 수 있다 — POST와 같은 검사
+  const reason = crossSiteReason(req);
+  if (reason) {
+    console.warn(`[ws] 거부 — ${reason}`);
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    return socket.destroy();
+  }
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 };
 
