@@ -2,7 +2,7 @@
 
 > 제품 요구사항 문서. 사용자 안내는 README.md, 구현 컨텍스트는 CLAUDE.md,
 > 매크로패드는 ADVANCED_MACROPAD.md를 본다. 이 문서는 "무엇을, 왜, 어디까지"를 정한다.
-> 마지막 갱신: 2026-09-22 (v0.1.0 기준, 자동 테스트 + 실기기 엔드투엔드 검증 완료)
+> 마지막 갱신: 2026-09-22 (v0.2.0 기준 — CLI·doctor·한 줄 설치·파일 로그 포함. 자동 테스트 43개 + 실기기 엔드투엔드 검증)
 
 ## 1. 배경과 문제
 
@@ -26,6 +26,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | 시스템 장애 시 Claude Code 영향 | 없음 (fail-open, 기본 프롬프트로 복귀) |
 | 첫 설치 소요 | 5분 이내, 스크립트 1회 |
 | 네트워크 의존 | Wi-Fi 없이 USB 케이블만으로 동작 (아이폰은 개인용 핫스팟이 켜져야 하므로 유심/데이터 요금제 필요, 안드로이드는 adb만 있으면 됨) |
+| 새 환경 설치 | `curl … \| bash` 한 줄, publish·yarn 불필요 |
+| 장애 원인 파악 | `doctor` 1회 + 로그 2개(`daemon.log`·`hook.log`)로 hook → 데몬 → 폰 중 어디서 끊겼는지 특정 |
 
 ## 3. 비목표
 
@@ -58,6 +60,11 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 
 **S4. 다이얼 조작 (선택, tmux 필요)**
 - 매크로패드 노브 또는 `/api/action`으로 확장 사고 토글, 모델 순환(`/model sonnet` ↔ `/model opus`), Escape를 보낸다.
+
+**S5. 새 맥에서 설치하고, 안 될 때 원인 찾기**
+1. `curl -fsSL …/scripts/install-cli.sh | bash` → `claude-controller install-hooks` → `claude-controller start`.
+2. `claude-controller doctor`로 node·claude CLI·hook 등록·데몬·hook 왕복·폰 연결 경로를 한 번에 확인. 실패 항목마다 고칠 방법이 붙는다.
+3. 허가 요청이 폰에 안 뜨면 `claude-controller logs`: `hook.log`에 그 시각 줄이 있는가(hook이 실행됐는지) → `daemon.log`에 `[hook] PermissionRequest`(데몬까지 왔는지) → `[ws] 접속`(폰이 붙어 있는지) 순으로 좁힌다.
 
 ## 5. 기능 요구사항
 
@@ -101,9 +108,6 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-22 | hook 타임아웃: PermissionRequest 3600초, 나머지 10초. hook-handler 자체 fetch 타임아웃은 허가 1시간, 그 외 3초 | 구현 |
 | F-23 | `scripts/uninstall-hooks.js`로 이 리포의 hook만 제거(command에 `hook-handler.js` 포함 항목). 백업은 만들지 않는다 | 구현 |
 | F-24 | yarn/corepack이 없는 환경(node 25+)에서도 설치가 완주한다(`npx corepack` 폴백) | 구현·검증 |
-| F-30 | **CLI 패키징**: `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로 클론 없이 사용. 명령은 `doctor`·`start`·`install-hooks`·`uninstall-hooks`·`shell-init`·`help`. npm 패키지는 `dist/`를 동봉(`prepack`에서 빌드). npx/dlx 캐시처럼 임시 경로에서 `install-hooks`를 실행하면 handler와 cl.sh를 `~/.claude-controller/`에 복사해 그 경로를 등록한다(캐시가 지워져도 hook이 살아 있게). `--copy`/`--no-copy`로 강제. 설정은 `~/.claude-controller/config.json`(리포 루트가 우선) | 구현·검증(tarball 설치 후 npx로 install-hooks·doctor 실행, 격리 HOME 테스트 7개) |
-| F-32 | **한 줄 로컬 설치**(`scripts/install-cli.sh`, publish 불필요): `curl … \| bash`로 리포를 `~/.claude-controller/repo`에 얕은 클론(이미 있으면 `git pull --ff-only`), yarn→corepack→npx corepack 폴백으로 의존성 설치·빌드, `~/.local/bin/claude-controller` 래퍼(`exec node <repo>/bin/claude-controller.js`) 생성, PATH 미포함 시 안내. 클론 안에서 실행하면 그 클론 사용. `--uninstall`로 래퍼·클론 제거. `CC_REPO_DIR`/`CC_BIN_DIR`/`CC_REPO_URL`/`CC_BRANCH`로 위치 변경. node 20.19 미만이면 중단 | 구현·검증(클론 내·파이프(GitHub 클론)·재실행·제거 4경로 실행 확인) |
-| F-31 | **doctor**: 새 환경에서 동작할지 진단. Node 버전, claude CLI, dist 존재, config 파싱·`0.0.0.0` 경고, hook 5개 이벤트 등록, hook 명령의 node 절대경로 존재, handler 존재·복사본 최신 여부, hook 포트=데몬 포트, hook 타임아웃≥대기 시간, 데몬 응답·포트 점유 프로세스, **실제 hook-handler로 SessionStart 왕복**(자동 정리), Wi-Fi 인터페이스 식별, 테더링 인터페이스(Wi-Fi에만 있으면 경고), adb 기기, tmux, Karabiner 규칙, rc의 cl.sh source. 실패가 있으면 종료 코드 1, `--json` 출력 | 구현·검증(데몬 유무 양쪽, 포트 불일치·오래된 복사본 감지 테스트) |
 | F-25 | `cl` 셸 함수: tmux 밖이면 프로젝트별 tmux 세션(`claude-<폴더명>`, 특수문자는 `_`)을 만들어 claude 실행, 같은 폴더에서 재실행하면 기존 세션에 재접속(이때 전달한 인자는 무시됨), 이미 tmux 안이면 그냥 `claude`. 인자는 tmux 경유 시 공백 기준으로 합쳐진다. tmux 없으면 경고 후 plain claude. 모델은 지정하지 않는다 | 구현 |
 
 ### 5.4 다이얼 액션 (P1, 선택)
@@ -115,6 +119,15 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-28 | 모델 순환은 `modelCycle` 목록 기준. 세션 모델을 모르면(hook에 정보 없음) 첫 항목부터 시작. 목록이 비어 있으면 `{ok:false}` | 구현 |
 | F-29 | 매크로패드: Karabiner(기본) 또는 Hammerspoon(대체)으로 F19~F24를 `POST /api/key` 1~6에 매핑. 1~3은 허가 응답, 4~6은 다이얼. `escape`는 키 매핑 없음. 실패(409) 시 Hammerspoon은 화면 알림을 띄우고 Karabiner는 무반응 | 구현·검증(키 1) |
 
+### 5.5 설치·CLI·진단 (P0)
+
+| ID | 요구사항 | 상태 |
+| --- | --- | --- |
+| F-30 | **CLI 패키징**: `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로 클론 없이 사용. 명령은 `doctor`·`start`·`install-hooks`·`uninstall-hooks`·`shell-init`·`help`. npm 패키지는 `dist/`를 동봉(`prepack`에서 빌드). npx/dlx 캐시처럼 임시 경로에서 `install-hooks`를 실행하면 handler와 cl.sh를 `~/.claude-controller/`에 복사해 그 경로를 등록한다(캐시가 지워져도 hook이 살아 있게). `--copy`/`--no-copy`로 강제. 설정은 `~/.claude-controller/config.json`(리포 루트가 우선) | 구현·검증(tarball 설치 후 npx로 install-hooks·doctor 실행, 격리 HOME 테스트 7개) |
+| F-31 | **doctor**: 새 환경에서 동작할지 진단. Node 버전, claude CLI, dist 존재, config 파싱·`0.0.0.0` 경고, hook 5개 이벤트 등록, hook 명령의 node 절대경로 존재, handler 존재·복사본 최신 여부, hook 포트=데몬 포트, hook 타임아웃≥대기 시간, 데몬 응답·포트 점유 프로세스, **실제 hook-handler로 SessionStart 왕복**(자동 정리), Wi-Fi 인터페이스 식별, 테더링 인터페이스(Wi-Fi에만 있으면 경고), adb 기기, tmux, Karabiner 규칙, rc의 cl.sh source. 실패가 있으면 종료 코드 1, `--json` 출력 | 구현·검증(데몬 유무 양쪽, 포트 불일치·오래된 복사본 감지 테스트) |
+| F-32 | **한 줄 로컬 설치**(`scripts/install-cli.sh`, publish 불필요): `curl … \| bash`로 리포를 `~/.claude-controller/repo`에 얕은 클론(이미 있으면 `git pull --ff-only`), yarn→corepack→npx corepack 폴백으로 의존성 설치·빌드, `~/.local/bin/claude-controller` 래퍼(`exec node <repo>/bin/claude-controller.js`) 생성, PATH 미포함 시 안내. 클론 안에서 실행하면 그 클론 사용. `--uninstall`로 래퍼·클론 제거. `CC_REPO_DIR`/`CC_BIN_DIR`/`CC_REPO_URL`/`CC_BRANCH`로 위치 변경. node 20.19 미만이면 중단 | 구현·검증(클론 내·파이프(GitHub 클론)·재실행·제거 4경로 실행 확인) |
+| F-33 | **logs 명령**: `claude-controller logs`로 `daemon.log`·`hook.log` 끝부분 출력(`-n`, `--follow`=tail -F, `--hook`/`--daemon`). 로그 내용은 N-8 | 구현·검증 |
+
 ## 6. 비기능 요구사항
 
 | ID | 요구사항 | 상태 |
@@ -125,8 +138,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | N-4 | **팀 영향 없음**: "항상 예" 규칙은 gitignore 대상인 `settings.local.json`에만 기록 | 구현·검증 |
 | N-5 | **최소 의존성**: 런타임 의존성은 `ws` 하나. tmux·adb·Karabiner/Hammerspoon은 선택. 대시보드는 tmux 없이도 동작(문구도 그렇게 안내) | 구현 |
 | N-6 | **상태 휘발**: 세션/요청 상태는 데몬 메모리에만 둔다. 재시작 후에는 다음 hook 이벤트가 `cwd`·`tmuxPane`을 동반하므로 카드가 자연 복구된다 | 구현 |
-| N-8 | **원인 추적 가능(관측성)**: 데몬은 stdout과 `~/.claude-controller/logs/daemon.log`에 동시에 기록(타임스탬프·레벨, 5MB 초과 시 `.1`로 1회 로테이션): 시작(pid·node·로그 경로), 모든 hook 이벤트 수신(이벤트·sid·cwd·pane·tool), 허가 대기·응답(결정·강등·요청 id·대기 시간)·타임아웃, 403/413/미인식 이벤트, WS 접속/해제, 바인딩, uncaughtException/unhandledRejection. hook-handler는 fail-open으로 조용히 넘어가는 **모든 경로의 사유**(데몬 없음 ECONNREFUSED, 응답 없음, 데몬 4xx/5xx 본문, stdin 파싱 실패, 예외)와 허가 결정·소요 시간을 `hook.log`에 남긴다(의존성 없이 자체 구현, 로그 실패는 삼킴). `claude-controller logs`(`-n`, `--follow`, `--hook`/`--daemon`)로 열람, doctor가 최근 300줄의 경고/오류 건수와 마지막 오류를 요약. 위치는 `CLAUDE_CONTROLLER_LOG_DIR`로 변경 | 구현·검증(로테이션, hook 실패 사유·결정 기록, 데몬 로그 내용, logs 명령, doctor 요약 테스트) |
 | N-7 | **재현 가능한 검증**: `yarn test`가 규칙 생성·상태 저장소 단위 테스트와, 데몬을 임의 포트로 띄워 실제 hook-handler를 실행하는 통합 테스트를 돌린다 | 구현·검증 |
+| N-8 | **원인 추적 가능(관측성)**: 데몬은 stdout과 `~/.claude-controller/logs/daemon.log`에 동시에 기록(타임스탬프·레벨, 5MB 초과 시 `.1`로 1회 로테이션): 시작(pid·node·로그 경로), 모든 hook 이벤트 수신(이벤트·sid·cwd·pane·tool), 허가 대기·응답(결정·강등·요청 id·대기 시간)·타임아웃, 403/413/미인식 이벤트, WS 접속/해제, 바인딩, uncaughtException/unhandledRejection. hook-handler는 fail-open으로 조용히 넘어가는 **모든 경로의 사유**(데몬 없음 ECONNREFUSED, 응답 없음, 데몬 4xx/5xx 본문, stdin 파싱 실패, 예외)와 허가 결정·소요 시간을 `hook.log`에 남긴다(의존성 없이 자체 구현, 로그 실패는 삼킴). `claude-controller logs`(`-n`, `--follow`, `--hook`/`--daemon`)로 열람, doctor가 최근 300줄의 경고/오류 건수와 마지막 오류를 요약. 위치는 `CLAUDE_CONTROLLER_LOG_DIR`로 변경 | 구현·검증(로테이션, hook 실패 사유·결정 기록, 데몬 로그 내용, logs 명령, doctor 요약 테스트) |
 
 ## 7. 인터페이스
 
@@ -144,10 +157,14 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | 개발 프록시 | — | vite는 `changeOrigin`으로 Host를, `headers.origin`으로 Origin을 `127.0.0.1:9200`으로 바꿔 보낸다(위 검사를 통과하기 위해) |
 | `GET /*` | 폰 | `dist/` 정적 서빙. 빌드가 없으면 `/`에 503 + 안내. 허용 목록 밖 Host면 정적 파일도 403 JSON |
 | `config.json` | 사용자 → 데몬 | `host, port, autoBindSubnets, excludeInterfaces, permissionWaitSeconds, modelCycle, thinkingToggleKey, endedSessionTtlSeconds, adb.{enabled, intervalSeconds}`. 배열은 통째로 교체. 파싱 실패 시 기본값 + 로그. gitignore 대상 |
-| 환경변수 | — | `CLAUDE_CONTROLLER_PORT`, `CLAUDE_CONTROLLER_HOST` (config.json보다 우선, 테스트·임시 실행용) |
-| 개발 | — | `yarn dev`(vite 5173, `/api`·`/ws`를 9200으로 프록시), `yarn build`(dist/), `yarn test` |
+| 환경변수 | — | `CLAUDE_CONTROLLER_PORT`, `CLAUDE_CONTROLLER_HOST`(config.json보다 우선), `CLAUDE_CONTROLLER_LOG_DIR` — 테스트·임시 실행용 |
+| 개발 | — | `yarn dev`(vite 5173, `/api`·`/ws`를 9200으로 프록시), `yarn build`(dist/), `yarn test`, `yarn doctor` |
+| CLI | 사용자 | `claude-controller doctor [--json]` / `start` / `install-hooks [--copy\|--no-copy]` / `uninstall-hooks` / `logs [-n N] [--follow] [--hook\|--daemon]` / `shell-init` / `help`. 진입점 `bin/claude-controller.js`(npm `bin`), 알 수 없는 명령은 exit 2 |
+| 설치 스크립트 | 사용자 | `scripts/install-cli.sh` — `CC_REPO_DIR`(기본 `~/.claude-controller/repo`), `CC_BIN_DIR`(기본 `~/.local/bin`), `CC_REPO_URL`, `CC_BRANCH`, `CC_NO_PULL`; `--uninstall` |
+| `~/.claude-controller/` | — | `repo/`(한 줄 설치 클론), `logs/daemon.log`·`logs/hook.log`(+`.1`), `config.json`, `hook-handler.js`·`cl.sh`(npx/dlx 등 임시 경로에서 등록했을 때 복사본) |
+| 로그 | 데몬·hook → 파일 | 형식 `YYYY-MM-DD HH:mm:ss.SSS [LEVEL] 메시지`(로컬 시각). 위치는 `CLAUDE_CONTROLLER_LOG_DIR`로 변경(테스트 격리용). 상세는 N-8 |
 
-포트를 9200에서 바꾸면 hook 재등록(`install-hooks.js`)이 필요하고, Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
+포트를 9200에서 바꾸면 hook 재등록(`claude-controller install-hooks`)이 필요하고(doctor가 불일치를 잡는다), Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
 
 ## 8. 엣지케이스 (정해진 동작)
 
@@ -174,18 +191,22 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - **종료 세션이 허가 요청으로 되살아날 때** 새 `cwd`·`tmuxPane`이 **있으면** 그 값으로 갱신된다(pane이 바뀐 resume). tmux 밖에서 resume해 `tmuxPane`이 없으면 옛 pane이 남아 `hasTmux`가 참으로 보이고 다이얼은 옛 pane으로 간다(다음 SessionStart hook이 오면 정리됨).
 - **config.json의 `port`가 문자열이면** 데몬은 그 포트로 뜨지만 install-hooks는 정수만 인식해 hook을 9200으로 등록한다 → 정수로 적을 것.
 - **Wi-Fi 포트명이 "Wi-Fi"/"AirPort"가 아니면** 제외 실패를 경고로 알리므로 `excludeInterfaces`에 인터페이스 이름을 직접 적는다. `host`가 `auto`가 아니면 networksetup을 실행하지 않는다.
-- **hook에 박힌 node 절대경로**가 사라지면(nvm 버전 삭제 등) hook은 조용히 실패(fail-open)한다 → `install-hooks.js` 재실행.
+- **hook에 박힌 node 절대경로**가 사라지면(brew upgrade·nvm 버전 삭제 등) hook은 조용히 실패(fail-open)한다. `doctor`가 "hook의 node 경로" 실패로 잡고, `hook.log`에는 아무것도 안 남는다(node 자체가 안 뜨므로) → `claude-controller install-hooks` 재실행.
+- **로그 위치는 각 프로세스의 HOME 기준**: launchd 등 다른 HOME으로 데몬을 띄우면 `daemon.log`와 `hook.log`가 다른 디렉터리에 갈 수 있다. `doctor`가 보여주는 경로를 기준으로 본다.
+- **`hook.log`는 실패와 허가 결정만 남긴다**: Stop/Notification이 정상 전달된 경우는 `daemon.log`의 `[hook] …` 줄로 확인한다.
 - **install-hooks 실행 시 settings.json이 깨져 있으면** 백업 전에 중단하고 아무것도 바꾸지 않는다(install.sh도 그 자리에서 멈춘다).
 
 ## 9. 검증 (2026-09-22)
 
 - **자동 테스트** `yarn test` 43개(CLI·doctor 8개, 로그 3개 포함): 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
 - **실기기 엔드투엔드 ×2**: 실제 Claude Code 세션(`claude -p`)에서 Bash 허가 요청이 5초 내 데몬에 도착 → API 응답 → 명령 실행·정상 종료. 1회차는 프로젝트 스코프 hook, 2회차는 `install.sh`가 등록한 **사용자 스코프 hook 그대로**, "항상 예"로 `Bash(touch *)` 규칙 기록까지 확인.
-- **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주.
+- **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주. `install-cli.sh`는 클론 내 실행·파이프 실행(GitHub에서 실제 클론)·재실행(pull)·`--uninstall` 4경로 실행 확인, 푸시 후 실제 raw URL로 `curl | bash` 확인.
+- **CLI 패키징**: `npm pack` tarball을 임시 프로젝트에 설치해 `npx claude-controller`로 help·install-hooks(handler 자동 복사)·doctor 실행 확인. 격리 HOME 테스트 8개(기존 hook 보존, 재실행 중복 없음, port env 반영, uninstall, 포트 불일치·오래된 복사본 감지, logs).
+- **doctor**: 이 맥에서 15개 검사 실행(데몬 미실행 경고 1개 외 통과), 데몬을 띄운 상태에서 hook 왕복 통과·포트 불일치 감지 확인.
+- **로그**: 데몬 시작→hook 수신→허가 대기→always 강등→결정, hook.log의 결정·소요 시간·데몬 없음 사유를 실제 실행으로 확인. 샘플을 뽑다가 hook.log가 UTC로 찍혀 daemon.log와 어긋나는 문제를 발견해 로컬 시각으로 통일.
 - **테스트로 잡은 버그**: 종료 시 남은 허가 요청을 정리하면 상태가 `working`으로 되돌아가던 문제(정리 순서) 수정.
 - **미검증**(실기기·환경 필요): 아이폰 USB 테더링 인터페이스 실제 감지, Wi-Fi 제외의 실제 동작, tmux 다이얼 주입(성공 경로), 안드로이드 adb reverse(연결 경로), iOS Wake Lock·PWA 동작, WebSocket 백오프 재접속.
 - **미검증(Claude Code 매처 동작)**: 선행 env를 벗긴 규칙(`FOO=1 make test` → `Bash(make test *)`)이 실제로 `FOO=1 make test`에 매치되는지는 Claude Code의 permissions 매처가 선행 env 대입을 정규화하는지에 달렸다. 순수 프리픽스 매치라면 이 규칙은 무효(다음에 다시 묻는다)이며, 그 경우 선행 env 명령도 once로 강등하는 편이 일관된다.
-- **2~10차 감사 반영분**: `yarn test` 32개 통과(러너 보유 명령의 단독·옵션 선행 규칙 없음, command 없는 Bash 규칙 없음, 옵션 선행 서브명령·경로 붙은 명령 규칙 없음, pipx/uvx/bunx·uv tool·bun x 차단, 트리밍 깊이·배열 초과 표시, GET /api/state Host 검사·바이트 한도(한글 1.2MB 413)·객체 아닌 본문 400·키 타입·래퍼/러너 확장·중첩 트리밍 포함, 멀티바이트 본문·스냅샷 트리밍·비정수 키·hook 413 로그·중간 KEY=val 인자 포함, WebSocket Origin 거부, hook 본문 8MB·초과 passthrough, 소생 시 cwd/pane 갱신 포함). DNS 리바인딩 Host 위조는 `fetch()`가 Host 헤더를 버리므로 `node:http` + `setHost:false`로 실제 헤더를 보내 검증(evil.example 403, LOCALHOST·[::1] 통과, 포트 생략 403). `Origin: null` 거부, 쓰기 예외 강등, 종료 세션 늦은 이벤트 완전 무시, 중복 SessionEnd 불변, 종료 세션 허가 요청 소생, resume 후 재종료 TTL 포함. `yarn build` 성공 확인(2026-09-22).
 
 ## 10. 리스크
 
@@ -195,7 +216,9 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - **Wi-Fi 제외 의존**: `networksetup`이 없는 환경(비-macOS)에서는 Wi-Fi 제외가 동작하지 않고 경고만 남는다. 이 프로젝트는 macOS 전용이다.
 - **uninstall 판정 폭**: `hook-handler.js` 문자열 포함 여부로 판정하므로, 다른 도구가 같은 이름의 스크립트를 hook으로 쓰면 함께 제거될 수 있다. uninstall은 백업을 만들지 않는다.
 - **CSRF 방어의 한계**: Host/Origin 허용 목록은 브라우저 경유 공격(cross-site, DNS 리바인딩)을 막는 장치다. 같은 맥에서 도는 임의의 로컬 프로세스는 Host를 마음대로 넣을 수 있으므로 여전히 승인 API를 호출할 수 있다(로컬 프로세스 신뢰는 전제).
-- **node 절대경로 의존**: hook 명령에 설치 시점의 node 경로가 박힌다. 그 node가 사라지면 기능이 조용히 죽는다(fail-open). 재설치로 복구.
+- **node 절대경로 의존**: hook 명령에 설치 시점의 node 경로가 박힌다. 그 node가 사라지면 기능이 조용히 죽는다(fail-open). `doctor`가 감지하고 `install-hooks` 재실행으로 복구.
+- **로그 디스크**: 파일당 5MB, `.1` 한 개만 남기므로 최대 약 20MB. 그 이상 보관이 필요하면 외부 로테이션.
+- **npm 미발행**: `@creaticoding/claude-controller`는 아직 npm에 없다. `npx …` 경로는 `npm publish` 후에만 동작하며, 그 전까지는 한 줄 설치 스크립트가 기본 경로다.
 
 ## 11. 향후 후보 (미확정)
 
@@ -204,3 +227,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - 허가 요청 이력(최근 N건) 표시
 - 허가 요청이 오래 대기하면 폰 푸시 알림 대체 수단
 - SessionStart 페이로드에 모델이 실리면 초기 모델 표시
+- npm publish(`@creaticoding/claude-controller`)와 `npx` 경로 실사용 검증
+- `cl`이 같은 이름의 다른 경로 폴더와 tmux 세션을 공유하는 문제(세션명에 경로 해시 포함)
+- 매크로패드 KEY2(항상 예)가 once로 강등됐을 때의 표시(현재는 폰 화면만 안내)
+- 강등 안내 문구에서 "규칙 생성 불가"와 "기록 실패" 구분(응답에 reason 추가)
+- 데몬을 launchd 서비스로 등록하는 `claude-controller service install`

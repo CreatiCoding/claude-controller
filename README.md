@@ -36,10 +36,18 @@ claude-controller start           # 데몬 실행
 claude-controller doctor          # 새 환경에서 잘 될지 진단
 ```
 
-명령: `doctor` / `start` / `install-hooks` / `uninstall-hooks` / `shell-init`(cl 함수 출력) / `help`.
-설정은 리포 루트 `config.json` 또는 `~/.claude-controller/config.json`. npm에 발행돼 있다면
-`npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로도 같은 명령을 쓸 수 있다(이때 handler는
-`~/.claude-controller/`에 복사돼 등록된다).
+| 명령 | 하는 일 |
+| --- | --- |
+| `claude-controller doctor [--json]` | 새 환경 진단(아래 표). 실패가 있으면 종료 코드 1 |
+| `claude-controller start` | 데몬 실행 (`Ctrl-C`로 종료) |
+| `claude-controller install-hooks` | `~/.claude/settings.json`에 hook 등록 + Karabiner 규칙 복사. 재실행하면 갱신 |
+| `claude-controller uninstall-hooks` | 이 도구의 hook만 제거 |
+| `claude-controller logs [-n N] [--follow] [--hook\|--daemon]` | 로그 보기 ([문제 해결](#문제-해결)) |
+| `claude-controller shell-init` | `cl` 함수 출력 — `eval "$(claude-controller shell-init)"` |
+
+설정은 리포 루트 `config.json` 또는 `~/.claude-controller/config.json`. `~/.claude-controller/`에는 클론(`repo/`),
+로그(`logs/`), 설정이 모인다. npm에 발행돼 있다면 `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로도
+같은 명령을 쓸 수 있다(이때 handler는 `~/.claude-controller/`에 복사돼 등록된다). 아직 발행 전이다.
 
 ### doctor — 환경 진단
 
@@ -73,12 +81,14 @@ git clone <이 리포> && cd claude-controller
 ```
 
 (yarn 설치 + 대시보드 빌드 + Claude Code hook 등록까지 알아서 해준다. yarn/corepack이 없는 node 25+ 환경이면
-스크립트가 `npx corepack`으로 대신 실행하며, 이 경우 데몬은 `node src/daemon.js`로 띄운다)
+스크립트가 `npx corepack`으로 대신 실행하며, 이 경우 데몬은 `node src/daemon.js`로 띄운다.)
+클론에서 `claude-controller` 명령까지 쓰고 싶으면 대신 `./scripts/install-cli.sh`를 실행하면 된다 — 이 클론을
+그대로 쓰면서 `~/.local/bin/claude-controller` 래퍼만 만든다.
 
 **3. `~/.zshrc`에 한 줄 추가** (터미널에서 `cl` 명령을 쓰기 위해)
 
 ```bash
-source /경로/claude-controller/shell/cl.sh
+source /경로/claude-controller/shell/cl.sh        # 또는 eval "$(claude-controller shell-init)"
 ```
 
 **4. 폰 준비**
@@ -98,9 +108,11 @@ source /경로/claude-controller/shell/cl.sh
 ## 사용법 (매일 이것만)
 
 ```bash
-yarn start    # ① 데몬 켜기 (claude-controller 폴더에서. yarn 없으면 node src/daemon.js)
-cl            # ② 작업할 프로젝트 폴더에서 Claude Code 실행
+claude-controller start   # ① 데몬 켜기 (리포에서는 yarn start 또는 node src/daemon.js)
+cl                        # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```
+
+뭔가 이상하면 `claude-controller doctor`, 그래도 모르겠으면 `claude-controller logs` ([문제 해결](#문제-해결)).
 
 ③ 폰 브라우저에서 대시보드 열고 거치대에 두기
 
@@ -125,10 +137,13 @@ cl            # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```bash
 yarn dev      # 개발 서버(5173) — /api, /ws 는 로컬 데몬(9200)으로 프록시
 yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 재빌드 필요)
-yarn test     # node --test: 규칙 생성·상태 저장소 단위 테스트 + 데몬을 임의 포트로 띄운 hook 왕복 테스트
+yarn test     # node --test 43개: 규칙 생성·상태 저장소 단위, 데몬을 임의 포트로 띄운 hook 왕복, CLI·doctor(격리 HOME), 로그
+yarn doctor   # = node bin/claude-controller.js doctor
 ```
 
 Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`으로 대신 실행할 수 있다.
+테스트는 실제 `~/.claude`·`~/.claude-controller`를 건드리지 않는다(HOME·로그 디렉터리 격리, 임의 포트, tmux를 PATH에서 제외).
+코드 구조와 설계 결정은 `CLAUDE.md`, 요구사항·엣지케이스·검증 기록은 `PRD.md`에 있다.
 
 ## 동작 원리
 
@@ -180,8 +195,8 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
 - `host`: `auto`면 127.0.0.1 + 테더링 인터페이스 자동 바인딩. IP를 지정해도 127.0.0.1은 항상 유지된다(hook이 그리로 붙는다).
 - `excludeInterfaces`: 테더링 대역이라도 바인딩하지 않을 인터페이스. `wifi`는 맥의 Wi-Fi 포트로 치환된다 — 아이폰 핫스팟에 Wi-Fi로 붙으면 USB와 같은 172.20.10.x 대역이라, 이 제외가 없으면 핫스팟의 다른 기기도 승인 API에 닿는다.
 - `permissionWaitSeconds`: 실질 상한 3600초. hook 자체 타임아웃(3600초)이 먼저 끊는다.
-- `port`를 바꾸면 `node scripts/install-hooks.js`를 다시 실행해야 hook이 새 포트를 본다(`CLAUDE_CONTROLLER_PORT` env로 전달됨). Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
-- 배열 값은 병합이 아니라 통째로 교체된다. 환경변수 `CLAUDE_CONTROLLER_PORT`, `CLAUDE_CONTROLLER_HOST`가 있으면 그것이 우선한다.
+- `port`를 바꾸면 `claude-controller install-hooks`(리포에서는 `node scripts/install-hooks.js`)를 다시 실행해야 hook이 새 포트를 본다(`CLAUDE_CONTROLLER_PORT` env로 전달됨). `doctor`가 불일치를 잡는다. Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
+- 배열 값은 병합이 아니라 통째로 교체된다. 환경변수 `CLAUDE_CONTROLLER_PORT`, `CLAUDE_CONTROLLER_HOST`가 있으면 그것이 우선하고, `CLAUDE_CONTROLLER_LOG_DIR`로 로그 위치를 바꿀 수 있다.
 
 ## 제거
 
