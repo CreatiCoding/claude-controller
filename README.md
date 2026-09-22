@@ -89,7 +89,10 @@ cl            # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```bash
 yarn dev      # 개발 서버(5173) — /api, /ws 는 로컬 데몬(9200)으로 프록시
 yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 재빌드 필요)
+yarn test     # node --test: 규칙 생성·상태 저장소 단위 테스트 + 데몬을 임의 포트로 띄운 hook 왕복 테스트
 ```
+
+Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`으로 대신 실행할 수 있다.
 
 ## 동작 원리
 
@@ -101,7 +104,9 @@ yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 �
 3. 버튼/터치 응답:
    - **예** → hook이 `{"decision":{"behavior":"allow"}}` 출력
    - **항상 예** → 데몬이 해당 프로젝트 `.claude/settings.local.json`의 `permissions.allow`에
-     규칙 추가(예: `Bash(git push *)`, `WebFetch(domain:github.com)`) 후 allow
+     규칙 추가(예: `Bash(git push *)`, `WebFetch(domain:github.com)`) 후 allow.
+     파이프·`&&`·리다이렉트가 섞인 복합 명령이나 `sudo`/`env` 같은 래퍼 명령은 첫 토큰만으로
+     의도를 대표할 수 없어 규칙을 만들지 않고 **1회 승인으로 강등**된다(규칙 기록에 실패한 경우도 같다).
    - **아니오** → `{"behavior":"deny"}`
 4. **타임아웃(기본 300초) 또는 데몬 미실행 시** hook은 아무 출력 없이 종료
    → 터미널의 기본 허가 프롬프트로 자연스럽게 넘어간다. 즉 이 시스템이 죽어도 Claude Code는 평소대로 동작.
@@ -115,17 +120,35 @@ yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 �
 
 ## 설정 (선택)
 
-리포 루트에 `config.json` 생성 시 기본값을 덮어쓴다:
+리포 루트에 `config.json` 생성 시 기본값을 덮어쓴다(gitignore 대상). 아래가 전체 키와 기본값:
 
 ```json
 {
+  "host": "auto",
   "port": 9200,
+  "autoBindSubnets": ["172.20.10.", "192.168.42."],
+  "excludeInterfaces": ["wifi"],
   "permissionWaitSeconds": 300,
   "modelCycle": ["sonnet", "opus"],
   "thinkingToggleKey": "M-t",
+  "endedSessionTtlSeconds": 300,
   "adb": { "enabled": true, "intervalSeconds": 30 }
 }
 ```
+
+- `host`: `auto`면 127.0.0.1 + 테더링 인터페이스 자동 바인딩. IP를 지정해도 127.0.0.1은 항상 유지된다(hook이 그리로 붙는다).
+- `excludeInterfaces`: 테더링 대역이라도 바인딩하지 않을 인터페이스. `wifi`는 맥의 Wi-Fi 포트로 치환된다 — 아이폰 핫스팟에 Wi-Fi로 붙으면 USB와 같은 172.20.10.x 대역이라, 이 제외가 없으면 핫스팟의 다른 기기도 승인 API에 닿는다.
+- `permissionWaitSeconds`: 실질 상한 3600초. hook 자체 타임아웃(3600초)이 먼저 끊는다.
+- `port`를 바꾸면 `node scripts/install-hooks.js`를 다시 실행해야 hook이 새 포트를 본다(`CLAUDE_CONTROLLER_PORT` env로 전달됨). Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
+- 배열 값은 병합이 아니라 통째로 교체된다. 환경변수 `CLAUDE_CONTROLLER_PORT`, `CLAUDE_CONTROLLER_HOST`가 있으면 그것이 우선한다.
+
+## 제거
+
+```bash
+node scripts/uninstall-hooks.js   # ~/.claude/settings.json에서 이 리포의 hook만 제거
+```
+
+설치 시 만든 백업은 `~/.claude/settings.json.claude-controller.bak`(재설치마다 덮어씀).
 
 ## API (참고)
 
@@ -138,8 +161,10 @@ yarn build    # dist/ 생성 — 데몬이 이걸 서빙한다 (UI 수정 후 �
 | `GET /api/state`    | 현재 스냅샷(JSON)                                                       |
 | `GET /ws`           | WebSocket — `{type:"state", sessions:[...]}` 브로드캐스트               |
 
-데몬은 `127.0.0.1`과 폰 USB 테더링 인터페이스에만 바인딩된다. 폰 연결은
-USB 터널(테더링/adb reverse)이라 Wi-Fi 등 외부 네트워크를 전혀 타지 않는다.
+데몬은 `127.0.0.1`과 폰 USB 테더링 인터페이스에만 바인딩된다. 테더링 감지는 IP 대역
+기준이므로 맥의 Wi-Fi 인터페이스는 기본 제외한다(위 `excludeInterfaces`). `/api/respond`는
+실패해도 200 + `{ok:false, error}`, `/api/key`는 실패 시 409, `/api/state`는 `{sessions, now}`
+(WS 메시지에만 `type:"state"`가 붙는다). 요청 본문은 1MB까지.
 
 ## 문제 해결
 
@@ -151,6 +176,11 @@ USB 터널(테더링/adb reverse)이라 Wi-Fi 등 외부 네트워크를 전혀 
 - **대시보드가 안 뜸(빌드 없음 안내)** — `yarn build` 실행 후 데몬 재시작 없이 새로고침.
 - **허가 요청이 폰에 안 뜸** — 데몬을 hook 등록 _후에_ 시작했는지, Claude Code 세션을 hook 등록
   후 새로 시작했는지 확인. `~/.claude/settings.json`에 `PermissionRequest` 항목 존재 확인.
+  데몬 로그에 `[hook] 미인식 이벤트` 또는 `session_id 없는 페이로드`가 찍히면 Claude Code hook
+  스키마가 바뀐 것이다.
+- **데몬이 바로 죽음** — 9200 포트를 다른 프로세스가 쓰고 있으면 127.0.0.1 바인딩 실패로 종료한다
+  (`lsof -iTCP:9200`). `config.json`의 `port`를 바꾸고 hook을 재등록하면 된다.
+- **폰에서 `cl`로 띄운 세션의 모델을 바꾸고 싶음** — `cl`은 모델을 지정하지 않는다. 필요하면 `cl --model opus`처럼 인자로 넘긴다.
 - **매크로패드/다이얼 문제** — [ADVANCED_MACROPAD.md](ADVANCED_MACROPAD.md)의 문제 해결 참고.
 
 ## 설계 노트

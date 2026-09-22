@@ -37,6 +37,9 @@
 4. **매크로패드는 맥북에 연결** (폰 아님). 폰은 순수 디스플레이 + 터치 입력.
 5. **"항상 예" 구현** — 데몬이 프로젝트 `.claude/settings.local.json`의
    `permissions.allow`에 규칙 추가 후 allow (규칙 생성은 `src/permissions.js`).
+   복합 명령(`|`, `&&`, `;`, 리다이렉트, 서브셸)과 래퍼 명령(sudo/env/bash -c…)은 규칙을
+   만들지 않고, 규칙 기록에 실패해도 `once`로 강등한다 — "다시 묻지 않기"가 조용히
+   과도하게 넓어지거나 조용히 무시되는 두 경우를 모두 막기 위해.
 6. **다이얼 기능은 tmux 전제** — 데몬이 `tmux send-keys`로 주입. `shell/cl.sh`의 `cl`
    함수가 tmux를 자동으로 씌운다. tmux 없이도 허가 응답·상태 표시는 전부 동작.
 7. **장애 시 무해(fail-open)** — hook이 타임아웃(기본 300초)되거나 데몬이 죽어 있으면
@@ -53,10 +56,16 @@
 - `web/` — React + Vite 대시보드 (yarn dev / yarn build)
 - `karabiner/claude-controller.json` — F19~F24 → `/api/key` 매핑 (매크로패드용)
 - `hammerspoon/init.lua` — Karabiner를 못 쓰는 환경용 대체재
+- `scripts/uninstall-hooks.js` — hook 등록 제거(command에 `hook-handler.js`가 포함된 항목만)
+- `test/` — node:test. `permissions`·`state` 단위 + `daemon` 통합(임의 포트, 실제 hook-handler 실행)
 
 ## 작업 시 주의
 
 - 대시보드 UI 수정 후 `yarn build` 해야 데몬(`dist/` 서빙)에 반영된다.
 - 데몬은 127.0.0.1 + 폰 USB 테더링 대역에만 바인딩할 것 (인증 없는 승인 API이므로
-  외부 인터페이스에 열면 안 됨).
+  외부 인터페이스에 열면 안 됨). 테더링 감지는 IP 프리픽스 기준이라 Wi-Fi 인터페이스는
+  `excludeInterfaces`로 제외한다(아이폰 핫스팟 Wi-Fi 합류 시 같은 대역이 뜬다).
+- `yarn test`가 데몬을 임의 포트로 띄워 hook 왕복까지 검증한다. 동작을 바꾸면 테스트도 같이.
+- `endSession`은 남은 허가 요청을 먼저 정리한 뒤 ENDED를 찍는다(`resolvePending`이 상태를
+  working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다.
 - hook 스키마는 Claude Code 버전에 따라 바뀔 수 있다 — 이벤트 추가 시 공식 문서 확인.
