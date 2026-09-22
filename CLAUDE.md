@@ -6,7 +6,7 @@
 ## 프로젝트 한 줄 요약
 
 맥북에서 다른 작업 중에도, 폰 화면으로 Claude Code 세션 상태를 실시간으로 보고,
-터치(또는 선택 사항인 매크로패드 물리 버튼)로 허가 응답(예/항상 예/아니오)과
+터치(또는 선택 사항인 매크로패드 물리 버튼)로 허가 응답(예/항상 예/아니오/터미널에서 응답)과
 다이얼 명령을 보내는 시스템.
 
 ## 아키텍처
@@ -68,9 +68,7 @@
   `excludeInterfaces`로 제외한다(아이폰 핫스팟 Wi-Fi 합류 시 같은 대역이 뜬다).
 - `yarn test`가 데몬을 임의 포트로 띄워 hook 왕복까지 검증한다. 동작을 바꾸면 테스트도 같이.
 - `endSession`은 남은 허가 요청을 먼저 정리한 뒤 ENDED를 찍는다(`resolvePending`이 상태를
-  working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다. 종료 뒤
-  늦게 온 Stop/Notification은 `endedAt`이 있는 동안 status를 바꾸지 못하고, `start:` 이벤트만
-  종료를 해제한다(카드 영구 잔존 방지).
+  working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다.
 - "항상 예" 강등(규칙 없음/기록 실패 → once)은 `respond()` 안에서, 즉 폰에 응답을 돌려주기 전에
   결정한다. hook 응답 쪽에서 나중에 바꾸면 폰은 always, hook은 once를 보는 불일치가 생긴다.
 - POST는 `rejectCrossSite`가 먼저 본다(application/json 강제 + Host/Origin을 "데몬이 열어 둔 주소
@@ -78,5 +76,6 @@
   새 POST 라우트를 추가해도 이 검사 뒤에 둘 것. vite dev 프록시는 changeOrigin + Origin 헤더
   치환으로 이 검사를 통과한다.
 - 종료된 세션(`endedAt`)에는 `start:` 이벤트 외의 patch를 통째로 무시한다(updatedAt도). 늦은
-  이벤트가 "종료됨" 카드를 목록 맨 위로 올리는 것을 막기 위해서다.
+  이벤트가 "종료됨" 카드를 목록 맨 위로 올리는 것을 막기 위해서다. 예외는 허가 요청 도착
+  (`addPending`이 `start:permission`으로 되살림)과 중복 SessionEnd(데몬이 아예 건너뜀).
 - hook 스키마는 Claude Code 버전에 따라 바뀔 수 있다 — 이벤트 추가 시 공식 문서 확인.

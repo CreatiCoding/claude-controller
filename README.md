@@ -167,10 +167,13 @@ node scripts/uninstall-hooks.js   # ~/.claude/settings.json에서 이 리포의 
 `/api/action`은 실패해도 200 + `{ok:false, error}`, `/api/key`는 실패 시 409, `/api/state`는
 `{sessions, now}`(WS 메시지에만 `type:"state"`가 붙는다).
 
-POST는 `Content-Type: application/json`만 받고(아니면 415), `Origin` 헤더가 있으면 데몬 자신의
-host와 같아야 한다(아니면 403). 인증이 없는 승인 API를 브라우저에 열린 다른 사이트가
-cross-site로 호출하지 못하게 하는 장치다. curl·hook·Karabiner·Hammerspoon은 Origin을 안 보내므로
-영향 없다. 본문이 JSON이 아니면 400, 1MB를 넘으면 413.
+POST는 `Content-Type: application/json`만 받고(아니면 415), 요청의 `Host`와 (있다면) `Origin`이
+**데몬이 열어 둔 주소**(`127.0.0.1`, `localhost`, `[::1]`, 테더링 주소, 각각 `:포트` 포함)여야 한다
+(아니면 403 + 데몬 로그에 사유). 인증이 없는 승인 API를 브라우저에 열린 다른 사이트가 cross-site나
+DNS 리바인딩으로 호출하지 못하게 하는 장치다. 그래서 `http://mymac.local:9200`처럼 다른 호스트명으로
+대시보드를 열면 버튼이 전부 403이 난다 — 반드시 위 주소로 접속할 것. curl·hook·Karabiner·Hammerspoon은
+`127.0.0.1:포트`로 붙으므로 영향 없다. 본문이 JSON이 아니면 400, 1MB를 넘으면 413. 폰 화면은 실패 시
+상단에 빨간 띠로 상태 코드를 5초간 보여준다.
 
 ## 문제 해결
 
