@@ -22,8 +22,13 @@ export function trimString(s) {
 // 중첩 객체/배열(MultiEdit의 edits[], MCP 도구 입력)까지 재귀로 자른다
 function trimForDisplay(input, depth = 0) {
   if (typeof input === 'string') return trimString(input);
-  if (!input || typeof input !== 'object' || depth > 8) return input;
-  if (Array.isArray(input)) return input.slice(0, 200).map((v) => trimForDisplay(v, depth + 1));
+  if (!input || typeof input !== 'object') return input;
+  if (depth > 8) return '… (중첩 깊이 초과)'; // 원본을 그대로 흘리지 않는다
+  if (Array.isArray(input)) {
+    const out = input.slice(0, 200).map((v) => trimForDisplay(v, depth + 1));
+    if (input.length > 200) out.push(`… (+${input.length - 200}개)`);
+    return out;
+  }
   const out = {};
   for (const [k, v] of Object.entries(input)) out[k] = trimForDisplay(v, depth + 1);
   return out;

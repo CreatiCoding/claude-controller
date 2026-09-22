@@ -5,20 +5,21 @@ import path from 'node:path';
 
 // Bash 명령에서 규칙 프리픽스로 삼을 토큰 수를 늘려주는 명령들
 const SUBCOMMAND_CMDS = new Set([
-  'git', 'npm', 'pnpm', 'yarn', 'npx', 'docker', 'kubectl', 'cargo', 'go',
-  'brew', 'make', 'adb', 'tmux', 'gh', 'pip', 'pip3', 'poetry', 'uv',
+  'git', 'npm', 'pnpm', 'yarn', 'docker', 'kubectl', 'cargo', 'go',
+  'brew', 'make', 'adb', 'tmux', 'gh', 'pip', 'pip3', 'poetry', 'uv', 'bun',
 ]);
 
 // 뒤에 임의의 명령이 붙는 래퍼 — 프리픽스 규칙을 만들면 사실상 전부 허용이 된다
 const WRAPPER_CMDS = new Set([
   'sudo', 'doas', 'su', 'env', 'time', 'timeout', 'nohup', 'nice', 'xargs', 'exec', 'command', 'builtin',
   'sh', 'bash', 'zsh', 'eval', 'source', '.', 'watch', 'chroot',
-  'npx', // npx <패키지>는 임의 패키지 실행 — 프리픽스 규칙이면 전부 열린다
+  // <러너> <패키지>는 임의 패키지 실행 — 프리픽스 규칙이면 전부 열린다
+  'npx', 'pipx', 'uvx', 'bunx',
 ]);
 // "<명령> <서브명령>" 2토큰 규칙이 뒤에 오는 프로그램을 통째로 여는 러너 — 규칙을 만들지 않는다
 const RUNNER_PAIRS = new Set([
-  'uv run', 'poetry run', 'pipx run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
-  'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
+  'uv run', 'uv tool', 'uvx run', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
+  'bun x', 'bun run', 'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
 ]);
 
 /** 허가 요청 페이로드로부터 permissions.allow 규칙 문자열을 만든다. 못 만들면 null. */
