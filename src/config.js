@@ -1,5 +1,6 @@
 // 데몬 설정. 리포 루트의 config.json(선택)으로 덮어쓸 수 있다.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -54,13 +55,16 @@ function deepMerge(base, over) {
 }
 
 let config = defaults;
-const userConfigPath = path.join(ROOT, 'config.json');
-if (fs.existsSync(userConfigPath)) {
+// 리포 루트의 config.json이 우선, 없으면 ~/.claude-controller/config.json (npx/yarn dlx 사용 시 위치)
+export const HOME_CONFIG = path.join(os.homedir(), '.claude-controller', 'config.json');
+for (const userConfigPath of [path.join(ROOT, 'config.json'), HOME_CONFIG]) {
+  if (!fs.existsSync(userConfigPath)) continue;
   try {
     config = deepMerge(defaults, JSON.parse(fs.readFileSync(userConfigPath, 'utf8')));
   } catch (err) {
-    console.error(`[config] config.json 파싱 실패, 기본값 사용: ${err.message}`);
+    console.error(`[config] ${userConfigPath} 파싱 실패, 기본값 사용: ${err.message}`);
   }
+  break;
 }
 
 // 환경변수 덮어쓰기 (테스트·임시 실행용). hook-handler도 같은 이름을 본다.

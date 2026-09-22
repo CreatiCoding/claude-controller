@@ -1,7 +1,6 @@
 {
-  "name": "claude-controller",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@creaticoding/claude-controller",
+  "version": "0.2.0",
   "type": "module",
   "description": "맥북의 Claude Code 세션을 폰 대시보드(+선택: 매크로패드)로 원격 제어하는 데몬",
   "license": "MIT",
@@ -17,7 +16,9 @@
     "build": "vite build",
     "test": "node --test test/",
     "install-hooks": "node scripts/install-hooks.js",
-    "uninstall-hooks": "node scripts/uninstall-hooks.js"
+    "uninstall-hooks": "node scripts/uninstall-hooks.js",
+    "doctor": "node bin/claude-controller.js doctor",
+    "prepack": "vite build"
   },
   "engines": {
     "node": ">=20.19"
@@ -30,5 +31,32 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^7.0.0"
-  }
+  },
+  "bin": {
+    "claude-controller": "bin/claude-controller.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "dist",
+    "shell",
+    "karabiner",
+    "hammerspoon",
+    "scripts",
+    "README.md",
+    "ADVANCED_MACROPAD.md",
+    "PRD.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "claude-code",
+    "hooks",
+    "permission",
+    "remote",
+    "dashboard",
+    "macropad"
+  ]
 }
