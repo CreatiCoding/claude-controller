@@ -17,7 +17,8 @@ test('Bash: 일반 명령은 첫 토큰, 앞쪽 env 대입은 무시', () => {
   assert.equal(ruleForRequest(bash('ls -la')), 'Bash(ls *)');
   assert.equal(ruleForRequest(bash('FOO=1 BAR=2 make test')), 'Bash(make test *)');
   assert.equal(ruleForRequest(bash('make VERBOSE=1 test')), 'Bash(make VERBOSE=1 *)', '중간 KEY=val은 인자로 취급');
-  assert.equal(ruleForRequest(bash('git -C /x status')), 'Bash(git *)'); // 두 번째 토큰이 옵션이면 한 토큰
+  assert.equal(ruleForRequest(bash('git -C /x status')), null, '옵션이 서브명령 앞에 오면 규칙 없음(Bash(git *)는 너무 넓다)');
+  assert.equal(ruleForRequest(bash('git')), 'Bash(git *)');
 });
 
 test('Bash: 복합 명령(파이프·체인·리다이렉트·서브셸)은 규칙을 만들지 않는다', () => {
@@ -40,6 +41,14 @@ test('Bash: sudo/env/timeout/npx 같은 래퍼와 uv run 같은 러너는 규칙
   assert.equal(ruleForRequest(bash('bunx cowsay')), null);
   assert.equal(ruleForRequest(bash('bun x cowsay')), null);
   assert.equal(ruleForRequest(bash('bun install')), 'Bash(bun install *)');
+  assert.equal(ruleForRequest(bash('bun run dev')), 'Bash(bun run *)', 'npm run과 대칭');
+  // 옵션이 서브명령 앞에 오면 러너 우회가 아니라 규칙 없음
+  for (const c of ['kubectl -n default exec -it pod -- bash', 'docker -H unix:///x exec c sh', 'uv -q run python evil.py', 'npm --prefix x exec -- cowsay']) {
+    assert.equal(ruleForRequest(bash(c)), null, c);
+  }
+  // 경로가 붙은 명령은 래퍼 판정을 못 하므로 규칙 없음
+  assert.equal(ruleForRequest(bash('/usr/bin/env python evil.py')), null);
+  assert.equal(ruleForRequest(bash('./node_modules/.bin/tsx evil.ts')), null);
   assert.equal(ruleForRequest(bash('env FOO=1 ls')), null);
   assert.equal(ruleForRequest(bash('bash -c ls')), null);
 });

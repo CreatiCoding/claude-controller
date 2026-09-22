@@ -18,8 +18,8 @@ const WRAPPER_CMDS = new Set([
 ]);
 // "<명령> <서브명령>" 2토큰 규칙이 뒤에 오는 프로그램을 통째로 여는 러너 — 규칙을 만들지 않는다
 const RUNNER_PAIRS = new Set([
-  'uv run', 'uv tool', 'uvx run', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
-  'bun x', 'bun run', 'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
+  'uv run', 'uv tool', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
+  'bun x', 'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
 ]);
 
 /** 허가 요청 페이로드로부터 permissions.allow 규칙 문자열을 만든다. 못 만들면 null. */
@@ -37,11 +37,19 @@ export function ruleForRequest({ toolName, toolInput, permissionType }) {
     // 남겨야 한다 — 빼면 만들어진 규칙이 원래 명령에 프리픽스 매치되지 않아 "다시 묻지 않기"가 무효가 된다.
     while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
     if (words.length === 0) return null;
+    // 경로가 붙은 명령(/usr/bin/env, ./node_modules/.bin/x)은 이름으로 래퍼 판정을 할 수 없고,
+    // 프리픽스 규칙도 경로 단위라 의미가 불안정하므로 규칙을 만들지 않는다
+    if (words[0].includes('/')) return null;
     // 래퍼 명령(sudo/env/time 등)은 뒤에 오는 실제 명령이 무엇이든 열리므로 규칙을 만들지 않는다
     if (WRAPPER_CMDS.has(words[0])) return null;
     let prefix = words[0];
-    if (SUBCOMMAND_CMDS.has(words[0]) && words[1] && !words[1].startsWith('-')) {
-      prefix = `${words[0]} ${words[1]}`;
+    if (SUBCOMMAND_CMDS.has(words[0])) {
+      // 옵션이 서브명령 앞에 오면(`kubectl -n x exec …`) 2토큰 규칙을 만들 수 없고, `Bash(kubectl *)`는
+      // 차단하려던 `kubectl exec *`보다 넓다 → 규칙 없음. 서브명령은 첫 비옵션 토큰으로 본다.
+      const sub = words[1];
+      if (!sub) return `Bash(${prefix} *)`;
+      if (sub.startsWith('-')) return null;
+      prefix = `${words[0]} ${sub}`;
       if (RUNNER_PAIRS.has(prefix)) return null;
     }
     return `Bash(${prefix} *)`;
