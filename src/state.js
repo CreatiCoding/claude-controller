@@ -39,13 +39,17 @@ export class Store {
       };
       this.sessions.set(sessionId, s);
     }
-    // 종료된 세션에 늦게 도착한 Stop/Notification은 상태를 되살리지 않는다(카드가 영구 잔존하는
-    // 원인). 같은 id로 SessionStart가 다시 오면(resume) 종료를 해제한다.
-    if (s.endedAt && String(patch.lastEvent ?? '').startsWith('start:')) delete s.endedAt;
+    // 종료된 세션에 늦게 도착한 Stop/Notification 등은 통째로 무시한다 — 상태를 되살리면 카드가
+    // 영구 잔존하고, updatedAt/lastMessage만 갱신해도 "종료됨" 카드가 목록 맨 위로 튀어오른다.
+    // 같은 id로 SessionStart가 다시 오면(resume) 종료를 해제하고 TTL 삭제도 취소한다.
+    if (s.endedAt) {
+      if (!String(patch.lastEvent ?? '').startsWith('start:')) return s;
+      delete s.endedAt;
+      clearTimeout(s.ttlTimer);
+      s.ttlTimer = null;
+    }
     for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined || v === null) continue;
-      if (k === 'status' && s.endedAt) continue;
-      s[k] = v;
+      if (v !== undefined && v !== null) s[k] = v;
     }
     this.#touch(s);
     return s;
@@ -62,13 +66,15 @@ export class Store {
     s.status = SessionStatus.ENDED;
     s.endedAt = Date.now();
     s.lastEvent = `ended:${reason ?? ''}`;
-    setTimeout(() => {
+    clearTimeout(s.ttlTimer); // 재종료 시 이전 타이머가 조기 삭제하지 않도록
+    s.ttlTimer = setTimeout(() => {
       const cur = this.sessions.get(sessionId);
       if (cur?.endedAt) {
         this.sessions.delete(sessionId);
         this.onChange?.();
       }
-    }, this.endedTtlMs).unref();
+    }, this.endedTtlMs);
+    s.ttlTimer.unref();
     this.#touch(s);
   }
 
@@ -95,8 +101,8 @@ export class Store {
     if (!p) return null;
     this.pending.delete(requestId);
     const s = this.sessions.get(p.sessionId);
-    if (s && ![...this.pending.values()].some((x) => x.sessionId === p.sessionId)) {
-      s.status = SessionStatus.WORKING;
+    if (s && !s.endedAt && ![...this.pending.values()].some((x) => x.sessionId === p.sessionId)) {
+      s.status = SessionStatus.WORKING; // 종료된 세션은 되살리지 않는다
     }
     p.resolve(result);
     this.onChange?.();
