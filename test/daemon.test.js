@@ -24,6 +24,7 @@ before(async () => {
   daemon = spawn(process.execPath, [path.join(ROOT, 'src/daemon.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve, reject) => {
     daemon.stdout.on('data', (d) => { daemonLog += d; if (String(d).includes('대기 중')) resolve(); });
+    daemon.stderr.on('data', (d) => { daemonLog += d; }); // console.warn/error도 검증 대상
     daemon.on('exit', (c) => reject(new Error(`daemon exited ${c}`)));
     setTimeout(() => reject(new Error('daemon start timeout')), 5000);
   });
@@ -224,14 +225,35 @@ test('WebSocket 업그레이드도 허용 목록 밖 Origin은 403', async () =>
   good.close();
 });
 
-test('hook 이벤트 본문은 8MB까지 허용(대용량 Write content), 초과는 413 → 무출력', async () => {
-  const big = 'x'.repeat(2_000_000);
+test('hook 이벤트 본문은 8MB까지 허용(대용량 Write content), 초과는 413 → 무출력 + 데몬 로그', async () => {
+  const big = '한글🙂'.repeat(300_000); // 멀티바이트 — 청크 경계에서 깨지지 않아야 한다
   const r = await hook({ hook_event_name: 'Notification', session_id: 'S1', cwd, notification_type: 'other', message: big });
   assert.equal(r.code, 0);
-  assert.equal((await state()).sessions.find((x) => x.id === 'S1').lastMessage.length, 2_000_000, '2MB는 통과');
+  const shown = (await state()).sessions.find((x) => x.id === 'S1').lastMessage;
+  assert.equal(shown.length, 4000, '표시용 스냅샷은 4000자로 잘린다');
+  assert.ok(!shown.includes('\uFFFD'), 'UTF-8 청크 경계 깨짐 없음');
+  assert.equal(shown, big.slice(0, 4000));
   const huge = await hook({ hook_event_name: 'PermissionRequest', session_id: 'S1', cwd, tool_name: 'Write', tool_input: { content: 'x'.repeat(9_000_000) } });
   assert.equal(huge.code, 0);
   assert.equal(huge.out, '', '413이면 passthrough');
+  assert.match(daemonLog, /\[hook\] 413/);
+  // 큰 toolInput은 규칙 생성엔 원본, 스냅샷엔 트리밍
+  const done = permission('Write', { file_path: '/tmp/a', content: 'y'.repeat(100_000) });
+  const p = await waitPending();
+  assert.ok(p.toolInput.content.length < 4100);
+  assert.match(p.toolInput.content, /\+96000자\)$/);
+  await post('/api/respond', { id: p.id, decision: 'deny' });
+  await done;
+});
+
+test('/api/key: 1~3 범위의 비정수는 409, 대기 요청을 소비하지 않는다', async () => {
+  const done = permission('Bash', { command: 'pwd' });
+  await waitPending();
+  const res = await fetch(`${BASE}/api/key`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"key":1.5}' });
+  assert.equal(res.status, 409);
+  assert.equal((await state()).sessions.flatMap((s) => s.pending).length, 1, '요청이 남아 있어야 함');
+  await post('/api/key', { key: 3 });
+  assert.equal(JSON.parse((await done).out).hookSpecificOutput.decision.behavior, 'deny');
 });
 
 test('데몬이 없으면 hook은 무출력 exit 0 (fail-open)', async () => {

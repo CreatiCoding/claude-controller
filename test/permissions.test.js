@@ -16,6 +16,7 @@ test('Bash: 서브명령이 있는 명령은 두 토큰 프리픽스', () => {
 test('Bash: 일반 명령은 첫 토큰, 앞쪽 env 대입은 무시', () => {
   assert.equal(ruleForRequest(bash('ls -la')), 'Bash(ls *)');
   assert.equal(ruleForRequest(bash('FOO=1 BAR=2 make test')), 'Bash(make test *)');
+  assert.equal(ruleForRequest(bash('make VERBOSE=1 test')), 'Bash(make VERBOSE=1 *)', '중간 KEY=val은 인자로 취급');
   assert.equal(ruleForRequest(bash('git -C /x status')), 'Bash(git *)'); // 두 번째 토큰이 옵션이면 한 토큰
 });
 
