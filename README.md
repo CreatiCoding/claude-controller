@@ -36,7 +36,8 @@ git clone <이 리포> && cd claude-controller
 ./scripts/install.sh
 ```
 
-(yarn 설치 + 대시보드 빌드 + Claude Code hook 등록까지 알아서 해준다)
+(yarn 설치 + 대시보드 빌드 + Claude Code hook 등록까지 알아서 해준다. yarn/corepack이 없는 node 25+ 환경이면
+스크립트가 `npx corepack`으로 대신 실행하며, 이 경우 데몬은 `node src/daemon.js`로 띄운다)
 
 **3. `~/.zshrc`에 한 줄 추가** (터미널에서 `cl` 명령을 쓰기 위해)
 
@@ -61,7 +62,7 @@ source /경로/claude-controller/shell/cl.sh
 ## 사용법 (매일 이것만)
 
 ```bash
-yarn start    # ① 데몬 켜기 (claude-controller 폴더에서)
+yarn start    # ① 데몬 켜기 (claude-controller 폴더에서. yarn 없으면 node src/daemon.js)
 cl            # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```
 

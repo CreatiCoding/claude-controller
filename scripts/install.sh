@@ -4,14 +4,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== 1/4 의존성 설치 (yarn berry) =="
-if ! command -v yarn >/dev/null 2>&1; then
-  corepack enable 2>/dev/null || { echo "yarn이 없습니다 — corepack enable 또는 brew install yarn 후 재실행"; exit 1; }
+# yarn berry 확보: yarn → corepack → (node 25+처럼 corepack이 없는 경우) npx corepack 순으로 폴백
+if command -v yarn >/dev/null 2>&1; then
+  YARN="yarn"
+elif command -v corepack >/dev/null 2>&1; then
+  corepack enable 2>/dev/null || true
+  YARN="corepack yarn"
+else
+  echo "  ℹ️  yarn/corepack 없음 — npx corepack으로 대신 실행합니다 (npm i -g corepack 하면 이후 yarn 명령을 직접 쓸 수 있음)"
+  YARN="npx --yes corepack@latest yarn"
 fi
-yarn install
+$YARN install
 
 echo
 echo "== 2/4 대시보드 빌드 (React → dist/) =="
-yarn build
+$YARN build
 
 echo
 echo "== 3/4 Claude Code hook 등록 (~/.claude/settings.json) =="
@@ -41,7 +48,7 @@ fi
 echo
 echo "다음 단계:"
 echo "  1) 폰 준비: 아이폰은 개인용 핫스팟 + USB / 안드로이드는 USB 디버깅 (README 참고)"
-echo "  2) 데몬 실행: yarn start"
+echo "  2) 데몬 실행: yarn start  (yarn이 없으면: node src/daemon.js)"
 echo "  3) 폰 브라우저에서 대시보드 열기 → 홈 화면에 추가(PWA)"
 echo "  4) ~/.zshrc에 추가: source $(pwd)/shell/cl.sh  →  프로젝트에서 cl로 실행"
 echo "     (tmux는 다이얼 기능에만 필요 — cl이 자동으로 tmux 안에서 claude를 띄움)"
