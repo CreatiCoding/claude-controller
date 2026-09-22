@@ -42,6 +42,22 @@ test('세션 종료 시 남은 요청은 passthrough, TTL 후 제거', async () 
   assert.equal(store.sessions.has('A'), false);
 });
 
+test('종료 후 늦은 이벤트는 상태를 되살리지 않고 TTL에 제거되며, start 이벤트만 되살린다', async () => {
+  const store = new Store({ endedTtlMs: 20 });
+  store.upsertSession('A');
+  store.endSession('A', 'exit');
+  store.upsertSession('A', { status: SessionStatus.IDLE, lastEvent: 'stop' });
+  assert.equal(store.sessions.get('A').status, SessionStatus.ENDED);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(store.sessions.has('A'), false, '늦은 Stop이 와도 TTL 삭제는 진행');
+  store.upsertSession('B');
+  store.endSession('B', 'exit');
+  store.upsertSession('B', { status: SessionStatus.WORKING, lastEvent: 'start:resume' });
+  assert.equal(store.sessions.get('B').status, SessionStatus.WORKING);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(store.sessions.has('B'), true, 'resume된 세션은 삭제되지 않음');
+});
+
 test('스냅샷: 최근 활동 순 세션, 세션별 pending은 오래된 순, null 필드는 patch로 덮이지 않음', () => {
   const store = new Store();
   store.upsertSession('A', { cwd: '/a', tmuxPane: '%1' });

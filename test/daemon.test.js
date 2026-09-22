@@ -11,15 +11,18 @@ import WebSocket from 'ws';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 19200 + Math.floor(Math.random() * 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
-const env = { ...process.env, CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1' };
+// PATH를 시스템 기본으로 좁혀 tmux(/opt/homebrew/bin 등)가 안 보이게 한다 — 다이얼 실패 경로를
+// 결정적으로 만들고, 테스트가 실제 tmux 세션에 키를 보내는 일을 막는다.
+const env = { ...process.env, PATH: '/usr/bin:/bin', CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1' };
 let daemon;
 let cwd;
+let daemonLog = '';
 
 before(async () => {
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-proj-'));
   daemon = spawn(process.execPath, [path.join(ROOT, 'src/daemon.js')], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve, reject) => {
-    daemon.stdout.on('data', (d) => { if (String(d).includes('대기 중')) resolve(); });
+    daemon.stdout.on('data', (d) => { daemonLog += d; if (String(d).includes('대기 중')) resolve(); });
     daemon.on('exit', (c) => reject(new Error(`daemon exited ${c}`)));
     setTimeout(() => reject(new Error('daemon start timeout')), 5000);
   });
@@ -84,6 +87,15 @@ test('항상 예인데 규칙을 못 만들면(복합 명령) once로 강등', a
   assert.equal(JSON.parse((await done).out).hookSpecificOutput.decision.behavior, 'allow');
 });
 
+test('항상 예인데 cwd가 없어 기록할 곳이 없으면 once로 강등 — 폰 응답과 hook 출력이 일치', async () => {
+  const done = hook({ hook_event_name: 'PermissionRequest', session_id: 'NOCWD', tool_name: 'Bash', tool_input: { command: 'ls' } });
+  const p = await waitPending();
+  assert.deepEqual(await post('/api/respond', { id: p.id, decision: 'always' }), { ok: true, decision: 'once', rule: null });
+  assert.equal(JSON.parse((await done).out).hookSpecificOutput.decision.behavior, 'allow');
+  assert.match(daemonLog, /기록 실패\(cwd=없음\)/);
+  assert.match(daemonLog, /\[perm\] 결정: once/);
+});
+
 test('아니오 → deny + 메시지', async () => {
   const done = permission('WebFetch', { url: 'https://example.com/x' });
   const p = await waitPending();
@@ -126,13 +138,48 @@ test('WebSocket: 접속 즉시 스냅샷, 변경 시 브로드캐스트', async 
   ws.close();
 });
 
-test('Stop → idle, SessionEnd → ended, 미인식 이벤트/세션 없음도 무해', async () => {
+test('Notification(permission_prompt): 우리 hook이 잡고 있지 않을 때만 입력 대기', async () => {
+  const done = permission('Bash', { command: 'pwd' });
+  const p = await waitPending();
+  await hook({ hook_event_name: 'Notification', session_id: 'S1', cwd, notification_type: 'permission_prompt', message: '허가 필요' });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'waiting', '폰 카드가 떠 있으면 waiting 유지');
+  await post('/api/respond', { id: p.id, decision: 'passthrough' });
+  await done;
+  await hook({ hook_event_name: 'Notification', session_id: 'S1', cwd, notification_type: 'permission_prompt', message: '허가 필요' });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'input', 'passthrough 뒤 터미널 프롬프트 = 입력 대기');
+});
+
+test('다이얼: tmux pane은 알지만 tmux 실행이 실패하면 500이 아니라 ok:false', async () => {
+  const r = await post('/api/action', { action: 'escape', sessionId: 'S1' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /tmux/);
+  assert.equal((await post('/api/action', { action: 'escape', sessionId: 'nope' })).ok, false);
+});
+
+test('CSRF: text/plain simple request와 다른 Origin은 거부, 같은 Origin은 허용', async () => {
+  const raw = (headers, body = '{"key":1}') => fetch(`${BASE}/api/key`, { method: 'POST', headers, body });
+  assert.equal((await raw({ 'Content-Type': 'text/plain' })).status, 415);
+  assert.equal((await raw({ 'Content-Type': 'application/json', Origin: 'http://evil.example' })).status, 403);
+  assert.equal((await raw({ 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT}` })).status, 409, '같은 Origin은 통과(대기 없음이라 409)');
+  assert.equal((await raw({ 'Content-Type': 'application/json' }, '{broken')).status, 400);
+  assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"x":"' + 'a'.repeat(1_100_000) + '"}')).status, 413);
+});
+
+test('Stop → idle, SessionEnd → ended, 미인식 이벤트는 로그, 세션 없음도 무해', async () => {
   await hook({ hook_event_name: 'Stop', session_id: 'S1', cwd });
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'idle');
   await hook({ hook_event_name: 'SomethingNew', session_id: 'S1', cwd });
+  assert.match(daemonLog, /미인식 이벤트: SomethingNew/);
   assert.equal((await hook({ hook_event_name: 'Stop' })).code, 0, 'session_id 없어도 exit 0');
+  assert.match(daemonLog, /session_id 없는 페이로드/);
   await hook({ hook_event_name: 'SessionEnd', session_id: 'S1', cwd, reason: 'exit' });
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'ended');
+  // 늦게 도착한 Stop은 종료 상태를 되살리지 않는다
+  await hook({ hook_event_name: 'Stop', session_id: 'S1', cwd });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'ended');
+  // 같은 id로 SessionStart(resume)가 오면 다시 살아난다
+  await hook({ hook_event_name: 'SessionStart', session_id: 'S1', cwd, source: 'resume' });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'working');
 });
 
 test('데몬이 없으면 hook은 무출력 exit 0 (fail-open)', async () => {
