@@ -9,15 +9,24 @@ const SUBCOMMAND_CMDS = new Set([
   'brew', 'make', 'adb', 'tmux', 'gh', 'pip', 'pip3', 'poetry', 'uv',
 ]);
 
+// 뒤에 임의의 명령이 붙는 래퍼 — 프리픽스 규칙을 만들면 사실상 전부 허용이 된다
+const WRAPPER_CMDS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'xargs', 'exec', 'sh', 'bash', 'zsh', 'eval', 'source', '.']);
+
 /** 허가 요청 페이로드로부터 permissions.allow 규칙 문자열을 만든다. 못 만들면 null. */
 export function ruleForRequest({ toolName, toolInput, permissionType }) {
   const tool = toolName || permissionType;
   if (!tool || tool === 'unknown') return null;
 
   if (tool === 'Bash' && toolInput?.command) {
-    const words = String(toolInput.command).trim().split(/\s+/)
+    const command = String(toolInput.command).trim();
+    // 파이프·체인·리다이렉트·서브셸이 섞인 복합 명령은 첫 토큰만으로 의도를 대표할 수 없다
+    // (예: `cd x && git push` → `Bash(cd *)`가 되면 cd로 시작하는 모든 명령이 열린다). 1회 승인으로 강등.
+    if (/[|&;<>`$()\n]/.test(command)) return null;
+    const words = command.split(/\s+/)
       .filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)); // 앞쪽 env 대입 제거
     if (words.length === 0) return null;
+    // 래퍼 명령(sudo/env/time 등)은 뒤에 오는 실제 명령이 무엇이든 열리므로 규칙을 만들지 않는다
+    if (WRAPPER_CMDS.has(words[0])) return null;
     let prefix = words[0];
     if (SUBCOMMAND_CMDS.has(words[0]) && words[1] && !words[1].startsWith('-')) {
       prefix = `${words[0]} ${words[1]}`;

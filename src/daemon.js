@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import config, { ROOT } from './config.js';
 import { Store, SessionStatus } from './state.js';
@@ -62,7 +63,10 @@ async function handleHookEvent(req, res) {
   const { payload = {}, tmuxPane = null } = await readJson(req);
   const event = payload.hook_event_name;
   const sid = payload.session_id;
-  if (!sid) return json(res, 400, { error: 'session_id 없음' });
+  if (!sid) {
+    console.log(`[hook] session_id 없는 페이로드 무시 (event=${event ?? '(없음)'}) — hook 스키마 변경 여부 확인`);
+    return json(res, 400, { error: 'session_id 없음' });
+  }
 
   const base = { cwd: payload.cwd, tmuxPane };
 
@@ -113,15 +117,24 @@ async function handleHookEvent(req, res) {
       const decision = await wait;
       clearTimeout(timer);
 
-      if (decision.decision === 'always' && decision.rule) {
-        addAllowRule(payload.cwd, decision.rule);
+      if (decision.decision === 'always') {
+        // 규칙을 실제로 기록한 경우에만 'always'. cwd 없음·settings.local.json 파싱 실패 등으로
+        // 기록이 안 되면 1회 승인으로 강등해 "다시 묻지 않기"가 조용히 무시되는 일을 막는다.
+        const cwd = payload.cwd ?? store.sessions.get(sid)?.cwd;
+        if (!decision.rule || !addAllowRule(cwd, decision.rule)) {
+          console.log(`[perm] allow 규칙 기록 실패(rule=${decision.rule ?? '없음'}, cwd=${cwd ?? '없음'}) — 1회 승인으로 강등`);
+          decision.decision = 'once';
+          delete decision.rule;
+        }
       }
-      console.log(`[perm] 결정: ${decision.decision}`);
+      console.log(`[perm] 결정: ${decision.decision}${decision.rule ? ` (${decision.rule})` : ''}`);
       return json(res, 200, decision);
     }
 
     default:
-      // 등록하지 않은 이벤트가 와도 활동 갱신용으로만 사용
+      // 등록하지 않은 이벤트가 와도 활동 갱신용으로만 사용. Claude Code 쪽 hook 스키마가
+      // 바뀌어 이름이 달라진 경우를 알아차릴 수 있게 로그를 남긴다.
+      console.log(`[hook] 미인식 이벤트: ${event ?? '(없음)'} (${sid.slice(0, 8)})`);
       store.upsertSession(sid, { ...base, lastEvent: event });
       return json(res, 200, {});
   }
@@ -259,6 +272,11 @@ function listenOn(addr, onReady) {
   s.on('error', (err) => {
     console.error(`[daemon] ${addr}:${config.port} 바인딩 실패: ${err.message}`);
     servers.delete(addr);
+    if (addr === '127.0.0.1') {
+      // 루프백이 없으면 hook-handler가 닿을 수 없어 데몬이 떠 있어도 아무 일도 못 한다.
+      console.error('[daemon] 127.0.0.1 바인딩 없이는 동작할 수 없습니다 — 포트 사용 중인 프로세스를 확인하거나 config.json의 port를 바꾸세요');
+      process.exit(1);
+    }
   });
   s.listen(config.port, addr, () => {
     console.log(`[daemon] http://${addr}:${config.port} 에서 대기 중`);
@@ -267,14 +285,37 @@ function listenOn(addr, onReady) {
   servers.set(addr, s);
 }
 
+// 자동 바인딩에서 제외할 인터페이스 이름 집합. 'wifi'는 macOS Wi-Fi 포트 이름으로 치환.
+const excludedIfaces = resolveExcludedInterfaces(config.excludeInterfaces);
+function resolveExcludedInterfaces(names) {
+  const out = new Set();
+  for (const n of names ?? []) {
+    if (n !== 'wifi') { out.add(n); continue; }
+    try {
+      const txt = execFileSync('/usr/sbin/networksetup', ['-listallhardwareports'], { encoding: 'utf8', timeout: 5000 });
+      const m = txt.match(/Hardware Port: Wi-Fi\nDevice: (\S+)/);
+      if (m) out.add(m[1]);
+    } catch {
+      // networksetup 없음(비-macOS 등) — Wi-Fi 제외를 못 하므로 경고만
+      console.warn('[daemon] Wi-Fi 인터페이스를 찾지 못했습니다 — 핫스팟에 Wi-Fi로 붙어 있으면 그 대역에도 바인딩될 수 있습니다');
+    }
+  }
+  return out;
+}
+
 function tetherAddrs() {
   const found = [];
-  for (const ifaces of Object.values(os.networkInterfaces())) {
+  let skipped = false;
+  for (const [name, ifaces] of Object.entries(os.networkInterfaces())) {
     for (const i of ifaces ?? []) {
-      if (i.family === 'IPv4' && config.autoBindSubnets.some((p) => i.address.startsWith(p))) {
-        found.push(i.address);
-      }
+      if (i.family !== 'IPv4' || !config.autoBindSubnets.some((p) => i.address.startsWith(p))) continue;
+      if (excludedIfaces.has(name)) { skipped = true; continue; }
+      found.push(i.address);
     }
+  }
+  if (skipped && !tetherAddrs.warned) {
+    tetherAddrs.warned = true;
+    console.log('[daemon] 테더링 대역이 Wi-Fi 인터페이스에 있어 바인딩하지 않음 — 폰을 USB로 연결하세요');
   }
   return found;
 }
@@ -307,6 +348,8 @@ if (config.host === 'auto') {
     console.warn('[daemon] 경고: 모든 인터페이스에 바인딩합니다 — 같은 네트워크의 누구나 승인 API에 접근 가능');
   }
   listenOn(config.host);
+  // hook-handler는 항상 127.0.0.1로 붙으므로, 특정 IP만 지정해도 루프백은 유지한다
+  if (config.host !== '127.0.0.1' && config.host !== '0.0.0.0') listenOn('127.0.0.1');
 }
 
 if (config.adb.enabled) startAdbReverse(config.port, config.adb.intervalSeconds);
