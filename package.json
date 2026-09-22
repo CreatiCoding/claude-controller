@@ -15,6 +15,7 @@
     "start": "node src/daemon.js",
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test test/",
     "install-hooks": "node scripts/install-hooks.js",
     "uninstall-hooks": "node scripts/uninstall-hooks.js"
   },
