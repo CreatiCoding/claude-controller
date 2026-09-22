@@ -14,11 +14,18 @@ const URL_ = `http://127.0.0.1:${PORT}/hook/event`;
 const LOG_DIR = process.env.CLAUDE_CONTROLLER_LOG_DIR || path.join(os.homedir(), '.claude-controller', 'logs');
 const LOG = path.join(LOG_DIR, 'hook.log');
 
+// daemon.log와 같은 로컬 시각 형식 — 두 로그를 시각으로 대조할 수 있어야 한다 (toISOString은 UTC)
+function stamp() {
+  const d = new Date();
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
 function log(level, msg) {
   try {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     try { if (fs.statSync(LOG).size > 5 * 1024 * 1024) fs.renameSync(LOG, `${LOG}.1`); } catch {}
-    fs.appendFileSync(LOG, `${new Date().toISOString().replace('T', ' ').replace('Z', '')} [${level}] ${msg}\n`);
+    fs.appendFileSync(LOG, `${stamp()} [${level}] ${msg}\n`);
   } catch { /* 로그 실패는 무시 — hook은 어떤 경우에도 Claude Code를 막지 않는다 */ }
 }
 

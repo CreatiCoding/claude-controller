@@ -33,6 +33,8 @@ test('hook-handler: 데몬이 없으면 무출력 exit 0 이지만 hook.log 에 
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
   const log = fs.readFileSync(path.join(dir, 'hook.log'), 'utf8');
+  const hour = String(new Date().getHours()).padStart(2, '0');
+  assert.match(log, new RegExp(`^\\d{4}-\\d\\d-\\d\\d ${hour}:\\d\\d:\\d\\d\\.\\d{3} \\[WARN\\]`, 'm'), 'daemon.log와 같은 로컬 시각 형식');
   assert.match(log, /\[WARN\] PermissionRequest sid=abcdefgh tool=Bash → 데몬 없음\(http:\/\/127\.0\.0\.1:19997\/hook\/event\)/);
   const bad = spawnSync(process.execPath, [path.join(ROOT, 'bin/hook-handler.js')], { env, input: '{broken', encoding: 'utf8' });
   assert.equal(bad.status, 0);
