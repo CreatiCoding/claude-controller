@@ -30,5 +30,5 @@ cl() {
   base=$(printf '%s' "$base" | tr -c 'a-zA-Z0-9_-' '_')
   name="claude-$base"
 
-  tmux new-session -A -s "$name" -c "$PWD" "claude --model claude-fable-5 $*"
+  tmux new-session -A -s "$name" -c "$PWD" "claude $*"
 }
