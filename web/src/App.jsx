@@ -103,6 +103,13 @@ function SessionRow({ s }) {
       <div className="info">
         <div className="name">{projName(s)}</div>
         {s.lastMessage ? <div className="last">{s.lastMessage}</div> : null}
+        {(s.model || s.thinking !== null) ? (
+          <div className="meta">
+            {s.model ? <span>{s.model}</span> : null}
+            {s.thinking !== null ? <span>생각 {s.thinking ? 'ON' : 'OFF'}(추정)</span> : null}
+            {s.hasTmux ? <span>tmux</span> : null}
+          </div>
+        ) : null}
       </div>
       <div className="st">{STATUS_KO[s.status] ?? s.status}</div>
     </div>
@@ -116,15 +123,12 @@ export default function App() {
   const sessions = state.sessions ?? [];
   const pending = sessions.flatMap((s) => s.pending.map((p) => ({ ...p, session: s })));
 
-  // 허가 대기: 배경 점멸 + 최초 1회 진동
-  const vibedRef = useRef(false);
+  // 허가 대기: 배경 점멸 + 요청이 늘어날 때마다 진동(지원 기기)
+  const prevCountRef = useRef(0);
   useEffect(() => {
     document.body.classList.toggle('alert', pending.length > 0);
-    if (pending.length && !vibedRef.current) {
-      navigator.vibrate?.([120, 60, 120]);
-      vibedRef.current = true;
-    }
-    if (!pending.length) vibedRef.current = false;
+    if (pending.length > prevCountRef.current) navigator.vibrate?.([120, 60, 120]);
+    prevCountRef.current = pending.length;
   }, [pending.length]);
 
   return (
@@ -136,7 +140,7 @@ export default function App() {
       </header>
       <main>
         {!sessions.length ? (
-          <div className="empty">활성 세션이 없습니다.<br />맥에서 tmux 안에 claude를 실행하세요.</div>
+          <div className="empty">활성 세션이 없습니다.<br />맥에서 claude를 실행하세요 (다이얼 기능만 tmux 필요 — <code>cl</code>).</div>
         ) : (
           <>
             {pending.map((p) => <AskCard key={p.id} p={p} />)}
