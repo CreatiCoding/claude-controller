@@ -49,12 +49,13 @@ export class Store {
   endSession(sessionId, reason) {
     const s = this.sessions.get(sessionId);
     if (!s) return;
-    s.status = SessionStatus.ENDED;
-    s.lastEvent = `ended:${reason ?? ''}`;
-    // 이 세션에 걸린 허가 요청은 전부 passthrough로 정리
+    // 이 세션에 걸린 허가 요청은 전부 passthrough로 정리한다.
+    // resolvePending이 상태를 working으로 되돌리므로 ENDED 표시는 그 뒤에 한다.
     for (const p of [...this.pending.values()]) {
       if (p.sessionId === sessionId) this.resolvePending(p.id, { decision: 'passthrough' });
     }
+    s.status = SessionStatus.ENDED;
+    s.lastEvent = `ended:${reason ?? ''}`;
     setTimeout(() => {
       const cur = this.sessions.get(sessionId);
       if (cur && cur.status === SessionStatus.ENDED) {
@@ -127,7 +128,7 @@ export class Store {
       });
     }
     const sessions = [...this.sessions.values()]
-      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .sort((a, b) => b.updatedAt - a.updatedAt || b.startedAt - a.startedAt)
       .map((s) => ({
         id: s.id,
         cwd: s.cwd,
