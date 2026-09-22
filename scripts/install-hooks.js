@@ -20,7 +20,13 @@ const EVENTS = [
   { event: 'SessionEnd', timeout: 10 },
 ];
 
-const command = `"${NODE}" "${HANDLER}"`;
+// config.json에서 port를 바꿨다면 hook-handler도 같은 포트를 보도록 env로 전달
+let port = 9200;
+try {
+  const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
+  if (Number.isInteger(cfg.port)) port = cfg.port;
+} catch { /* config.json 없음 = 기본 포트 */ }
+const command = (port === 9200 ? '' : `CLAUDE_CONTROLLER_PORT=${port} `) + `"${NODE}" "${HANDLER}"`;
 
 let settings = {};
 if (fs.existsSync(SETTINGS)) {
@@ -44,4 +50,5 @@ fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
 fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
 console.log(`hook 등록 완료: ${SETTINGS}`);
 console.log(`등록된 이벤트: ${EVENTS.map((e) => e.event).join(', ')}`);
+if (port !== 9200) console.log(`데몬 포트 ${port} (config.json) — Karabiner/Hammerspoon/vite 프록시의 9200은 직접 바꿔야 합니다`);
 console.log('적용은 새로 시작하는 Claude Code 세션부터입니다.');
