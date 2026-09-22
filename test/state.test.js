@@ -42,7 +42,7 @@ test('세션 종료 시 남은 요청은 passthrough, TTL 후 제거', async () 
   assert.equal(store.sessions.has('A'), false);
 });
 
-test('종료 후 늦은 이벤트는 상태를 되살리지 않고 TTL에 제거되며, start 이벤트만 되살린다', async () => {
+test('종료 후 늦은 이벤트는 무시되고 TTL에 제거되며, start 이벤트와 허가 요청만 되살린다', async () => {
   const store = new Store({ endedTtlMs: 20 });
   store.upsertSession('A');
   store.endSession('A', 'exit');

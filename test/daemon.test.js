@@ -203,12 +203,35 @@ test('종료 세션에 허가 요청이 오면 되살아나고(고아 pending �
   await new Promise((r) => setTimeout(r, 5));
   await hook({ hook_event_name: 'SessionEnd', session_id: 'S1', cwd, reason: 'exit' });
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').updatedAt, first.updatedAt);
-  const done = permission('Bash', { command: 'pwd' });
+  const done = hook({ hook_event_name: 'PermissionRequest', session_id: 'S1', cwd: '/new/cwd', tool_name: 'Bash', tool_input: { command: 'pwd' } }, { TMUX_PANE: '%9' });
   const p = await waitPending();
-  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'waiting');
+  const revived = (await state()).sessions.find((x) => x.id === 'S1');
+  assert.equal(revived.status, 'waiting');
+  assert.equal(revived.cwd, '/new/cwd', '되살아날 때 새 cwd 반영');
+  assert.equal(revived.hasTmux, true);
   await post('/api/respond', { id: p.id, decision: 'once' });
   await done;
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'working');
+});
+
+test('WebSocket 업그레이드도 허용 목록 밖 Origin은 403', async () => {
+  const bad = new WebSocket(`ws://127.0.0.1:${PORT}/ws`, { headers: { Origin: 'http://evil.example' } });
+  const err = await new Promise((resolve) => { bad.on('error', resolve); bad.on('open', () => resolve(null)); });
+  assert.ok(err, '연결이 거부되어야 함');
+  assert.match(err.message, /403/);
+  const good = new WebSocket(`ws://127.0.0.1:${PORT}/ws`, { headers: { Origin: `http://127.0.0.1:${PORT}` } });
+  await new Promise((resolve, reject) => { good.on('open', resolve); good.on('error', reject); });
+  good.close();
+});
+
+test('hook 이벤트 본문은 8MB까지 허용(대용량 Write content), 초과는 413 → 무출력', async () => {
+  const big = 'x'.repeat(2_000_000);
+  const r = await hook({ hook_event_name: 'Notification', session_id: 'S1', cwd, notification_type: 'other', message: big });
+  assert.equal(r.code, 0);
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').lastMessage.length, 2_000_000, '2MB는 통과');
+  const huge = await hook({ hook_event_name: 'PermissionRequest', session_id: 'S1', cwd, tool_name: 'Write', tool_input: { content: 'x'.repeat(9_000_000) } });
+  assert.equal(huge.code, 0);
+  assert.equal(huge.out, '', '413이면 passthrough');
 });
 
 test('데몬이 없으면 hook은 무출력 exit 0 (fail-open)', async () => {
