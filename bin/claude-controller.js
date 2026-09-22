@@ -18,6 +18,7 @@ const HELP = `claude-controller — 폰으로 Claude Code 허가에 응답하는
                    npx/yarn dlx처럼 임시 경로에서 실행하면 handler를 ~/.claude-controller/ 에 복사해 등록
   uninstall-hooks  이 도구의 hook만 제거
   shell-init       cl 셸 함수 출력 — ~/.zshrc 에  eval "$(claude-controller shell-init)"
+  logs             로그 보기 (~/.claude-controller/logs/). -n 100, --follow, --hook|--daemon
   help             이 도움말
 
 처음 쓸 때: install-hooks → start → 폰 브라우저로 접속 → doctor 로 확인
@@ -45,6 +46,25 @@ async function main() {
     case 'uninstall-hooks': {
       const { uninstallHooks } = await import('../src/hooks-install.js');
       uninstallHooks();
+      return;
+    }
+    case 'logs': {
+      const { LOG_DIR, logPath, tailLines } = await import('../src/log.js');
+      const n = Number(args[args.indexOf('-n') + 1]) || 50;
+      const names = args.includes('--hook') ? ['hook'] : args.includes('--daemon') ? ['daemon'] : ['daemon', 'hook'];
+      if (args.includes('--follow') || args.includes('-f')) {
+        const { spawn } = await import('node:child_process');
+        const files = names.map(logPath).filter((f) => fs.existsSync(f));
+        if (!files.length) { console.log(`로그 없음: ${LOG_DIR}`); return; }
+        spawn('tail', ['-n', String(n), '-F', ...files], { stdio: 'inherit' });
+        return;
+      }
+      for (const name of names) {
+        const file = logPath(name);
+        console.log(`===== ${file}`);
+        const lines = tailLines(file, n);
+        console.log(lines.length ? lines.join('\n') : '(없음)');
+      }
       return;
     }
     case 'shell-init':

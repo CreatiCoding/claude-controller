@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import config, { ROOT } from './config.js';
 import { SETTINGS, EVENTS, isOurs, HOME_DIR } from './hooks-install.js';
+import { logPath, tailLines } from './log.js';
 
 const MIN_NODE = [20, 19];
 
@@ -188,6 +189,19 @@ export async function runChecks({ port = config.port } = {}) {
   const rc = ['.zshrc', '.bashrc', '.bash_profile'].map((f) => path.join(os.homedir(), f)).filter((f) => fs.existsSync(f));
   const sourced = rc.some((f) => /cl\.sh/.test(fs.readFileSync(f, 'utf8')));
   add('cl 셸 함수', sourced ? 'ok' : 'info', sourced ? 'rc 파일에서 cl.sh를 source함' : 'rc 파일에 cl.sh source 없음 — `claude`로 직접 실행해도 허가 응답은 동작');
+
+  // 11. 로그 — 최근 오류·경고 요약 (원인 추적의 출발점)
+  for (const name of ['daemon', 'hook']) {
+    const file = logPath(name);
+    if (!fs.existsSync(file)) { add(`로그 ${name}.log`, 'info', `${file} 없음 (아직 실행된 적 없음)`); continue; }
+    const recent = tailLines(file, 300);
+    const bad = recent.filter((l) => /\[(WARN|ERROR|FATAL)\]/.test(l));
+    const last = recent.at(-1) ?? '';
+    const size = (fs.statSync(file).size / 1024).toFixed(0);
+    add(`로그 ${name}.log`, bad.length ? 'warn' : 'ok',
+      `${file} (${size}KB) 최근 300줄 중 경고/오류 ${bad.length}건${bad.length ? ` — 마지막: ${bad.at(-1).slice(0, 160)}` : ''}${!bad.length && last ? ` — 마지막 줄: ${last.slice(0, 100)}` : ''}`,
+      bad.length ? `\`claude-controller logs --${name}\` 로 전체 확인` : undefined);
+  }
 
   return checks;
 }
