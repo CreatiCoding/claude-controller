@@ -222,6 +222,24 @@ node scripts/uninstall-hooks.js                         # 리포에서 직접 �
 
 ## 문제 해결
 
+**먼저 로그부터.** 데몬과 hook은 각각 `~/.claude-controller/logs/daemon.log`, `hook.log`에 타임스탬프·레벨과 함께
+기록한다(5MB 넘으면 `.1`로 한 번 굴림). 터미널을 닫아도 남는다.
+
+```bash
+claude-controller logs              # 두 로그 끝 50줄
+claude-controller logs -n 200 --hook
+claude-controller logs --follow     # tail -F
+claude-controller doctor            # 최근 300줄의 경고/오류 건수와 마지막 오류를 요약
+```
+
+- `daemon.log`: 시작(pid·node·로그 경로), **모든 hook 이벤트 수신**(`[hook] PermissionRequest sid=… tool=…`),
+  허가 대기·응답(누가 눌렀는지, 강등 여부, 대기 시간), 타임아웃, 403/413/미인식 이벤트, WS 접속/해제, 바인딩.
+- `hook.log`: hook-handler가 **왜 조용히 넘어갔는지** — `데몬 없음(ECONNREFUSED)`, `응답 없음 3s`, `데몬 403/413 …`,
+  `stdin JSON 파싱 실패`. 허가 요청의 최종 결정과 소요 시간도 남는다. 로그는 실패·허가 결정만 남기므로 Stop/Notification이
+  정상 전달된 경우는 daemon.log 쪽에서 본다.
+- "허가 요청이 폰에 안 뜸"은 `hook.log`에 해당 시각 줄이 있는지(hook이 실행됐는지) → `daemon.log`에 `[hook] PermissionRequest`가
+  있는지(데몬까지 왔는지) → `[ws] 접속`이 있는지(폰이 붙어 있는지) 순으로 좁힌다.
+
 - **아이폰에서 접속 안 됨** — 개인용 핫스팟이 켜져 있는지, 데몬 로그에
   `폰 테더링 감지 — http://172.20.10.x:9200` 가 떴는지 확인(감지는 10초 주기).
   Wake Lock은 iOS 16.4+ 사파리 필요. 아이폰은 진동 알림이 안 되므로 화면 점멸이 대신한다.

@@ -125,6 +125,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | N-4 | **팀 영향 없음**: "항상 예" 규칙은 gitignore 대상인 `settings.local.json`에만 기록 | 구현·검증 |
 | N-5 | **최소 의존성**: 런타임 의존성은 `ws` 하나. tmux·adb·Karabiner/Hammerspoon은 선택. 대시보드는 tmux 없이도 동작(문구도 그렇게 안내) | 구현 |
 | N-6 | **상태 휘발**: 세션/요청 상태는 데몬 메모리에만 둔다. 재시작 후에는 다음 hook 이벤트가 `cwd`·`tmuxPane`을 동반하므로 카드가 자연 복구된다 | 구현 |
+| N-8 | **원인 추적 가능(관측성)**: 데몬은 stdout과 `~/.claude-controller/logs/daemon.log`에 동시에 기록(타임스탬프·레벨, 5MB 초과 시 `.1`로 1회 로테이션): 시작(pid·node·로그 경로), 모든 hook 이벤트 수신(이벤트·sid·cwd·pane·tool), 허가 대기·응답(결정·강등·요청 id·대기 시간)·타임아웃, 403/413/미인식 이벤트, WS 접속/해제, 바인딩, uncaughtException/unhandledRejection. hook-handler는 fail-open으로 조용히 넘어가는 **모든 경로의 사유**(데몬 없음 ECONNREFUSED, 응답 없음, 데몬 4xx/5xx 본문, stdin 파싱 실패, 예외)와 허가 결정·소요 시간을 `hook.log`에 남긴다(의존성 없이 자체 구현, 로그 실패는 삼킴). `claude-controller logs`(`-n`, `--follow`, `--hook`/`--daemon`)로 열람, doctor가 최근 300줄의 경고/오류 건수와 마지막 오류를 요약. 위치는 `CLAUDE_CONTROLLER_LOG_DIR`로 변경 | 구현·검증(로테이션, hook 실패 사유·결정 기록, 데몬 로그 내용, logs 명령, doctor 요약 테스트) |
 | N-7 | **재현 가능한 검증**: `yarn test`가 규칙 생성·상태 저장소 단위 테스트와, 데몬을 임의 포트로 띄워 실제 hook-handler를 실행하는 통합 테스트를 돌린다 | 구현·검증 |
 
 ## 7. 인터페이스
@@ -178,7 +179,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 
 ## 9. 검증 (2026-09-22)
 
-- **자동 테스트** `yarn test` 39개(CLI·doctor 7개 포함): 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
+- **자동 테스트** `yarn test` 43개(CLI·doctor 8개, 로그 3개 포함): 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
 - **실기기 엔드투엔드 ×2**: 실제 Claude Code 세션(`claude -p`)에서 Bash 허가 요청이 5초 내 데몬에 도착 → API 응답 → 명령 실행·정상 종료. 1회차는 프로젝트 스코프 hook, 2회차는 `install.sh`가 등록한 **사용자 스코프 hook 그대로**, "항상 예"로 `Bash(touch *)` 규칙 기록까지 확인.
 - **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주.
 - **테스트로 잡은 버그**: 종료 시 남은 허가 요청을 정리하면 상태가 `working`으로 되돌아가던 문제(정리 순서) 수정.

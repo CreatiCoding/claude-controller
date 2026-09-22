@@ -13,7 +13,7 @@ const PORT = 19200 + Math.floor(Math.random() * 1000);
 let HOME;
 let daemon;
 
-const env = () => ({ ...process.env, HOME, PATH: '/usr/bin:/bin', CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1' });
+const env = () => ({ ...process.env, HOME, PATH: '/usr/bin:/bin', CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1', CLAUDE_CONTROLLER_LOG_DIR: path.join(HOME, '.claude-controller', 'logs') });
 const run = (args, extra = {}) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env: { ...env(), ...extra }, timeout: 30_000 });
 const settingsPath = () => path.join(HOME, '.claude', 'settings.json');
 
@@ -98,6 +98,23 @@ test('uninstall-hooks: 이 도구의 hook만 제거, 기존 hook은 남는다', 
   const s = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
   assert.equal(s.hooks.PermissionRequest, undefined);
   assert.ok(s.hooks.Stop.some((g) => g.hooks.some((h) => h.command === 'echo other')));
+});
+
+test('logs: 데몬·hook 로그 끝부분을 보여주고, doctor가 로그 경고를 요약한다', () => {
+  const r = run(['logs', '-n', '500']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /===== .*daemon\.log/);
+  assert.match(r.stdout, /\[daemon\] 시작 pid=/);
+  assert.equal(run(['logs', '-n', '1', '--daemon']).stdout.trim().split('\n').length, 2, '-n 1 이면 헤더 + 1줄');
+  assert.match(r.stdout, /===== .*hook\.log/);
+  const only = run(['logs', '--hook']);
+  assert.ok(!/daemon\.log/.test(only.stdout));
+  const checks = JSON.parse(run(['doctor', '--json']).stdout);
+  const logChecks = checks.filter((c) => c.name.startsWith('로그 '));
+  assert.equal(logChecks.length, 2);
+  // hook.log 는 실패·허가 결정만 기록하므로 doctor 왕복(SessionStart 성공)만으로는 생기지 않을 수 있다 → info 허용
+  assert.ok(logChecks.every((c) => ['ok', 'warn', 'info'].includes(c.status)));
+  assert.equal(logChecks.find((c) => c.name === '로그 daemon.log').status, 'ok');
 });
 
 test('shell-init은 cl 함수를 출력한다', () => {

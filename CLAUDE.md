@@ -57,6 +57,10 @@
 - `src/tmux.js` / `src/adb.js` — tmux 주입, adb reverse 재시도
 - `bin/hook-handler.js` — Claude Code hook이 실행하는 스크립트 (stdin JSON → 데몬). 의존성 없음(복사돼도 동작)
 - `bin/claude-controller.js` — CLI 진입점(npm `bin`). doctor/start/install-hooks/uninstall-hooks/shell-init
+- `src/log.js` — 파일 로그(`~/.claude-controller/logs/<name>.log`, 5MB 로테이션). 데몬은 `installConsoleLogger`로
+  console.log/warn/error를 감싸 stdout과 파일에 동시에 남긴다(기존 console 호출을 그대로 살리는 방식).
+  hook-handler는 복사돼 실행되므로 이 모듈을 import하지 않고 같은 형식의 로그 함수를 자체 보유한다.
+  테스트는 `CLAUDE_CONTROLLER_LOG_DIR`로 격리.
 - `src/doctor.js` — 환경 진단. 각 검사가 `{name,status,detail,fix}`를 돌려주고 `formatChecks`가 출력
 - `src/hooks-install.js` — hook 등록/제거 로직. npx/dlx 같은 임시 경로면 handler·cl.sh를
   `~/.claude-controller/`에 복사해 그 경로를 등록(캐시가 지워져도 hook이 살아 있게)
@@ -92,3 +96,5 @@
   이벤트가 "종료됨" 카드를 목록 맨 위로 올리는 것을 막기 위해서다. 예외는 허가 요청 도착
   (`addPending`이 `start:permission`으로 되살림)과 중복 SessionEnd(데몬이 아예 건너뜀).
 - hook 스키마는 Claude Code 버전에 따라 바뀔 수 있다 — 이벤트 추가 시 공식 문서 확인.
+- 새 실패 경로를 만들면 반드시 로그 한 줄을 남길 것. hook-handler는 fail-open이라 로그가 없으면 "폰에 안 뜸"의
+  원인을 추적할 방법이 없다. 조용히 return 하기 전에 `log('WARN', …)`.

@@ -14,7 +14,8 @@ const PORT = 19200 + Math.floor(Math.random() * 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
 // PATH를 시스템 기본으로 좁혀 tmux(/opt/homebrew/bin 등)가 안 보이게 한다 — 다이얼 실패 경로를
 // 결정적으로 만들고, 테스트가 실제 tmux 세션에 키를 보내는 일을 막는다.
-const env = { ...process.env, PATH: '/usr/bin:/bin', CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1' };
+const LOG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dlog-'));
+const env = { ...process.env, PATH: '/usr/bin:/bin', CLAUDE_CONTROLLER_PORT: String(PORT), CLAUDE_CONTROLLER_HOST: '127.0.0.1', CLAUDE_CONTROLLER_LOG_DIR: LOG_DIR };
 let daemon;
 let cwd;
 let daemonLog = '';
@@ -29,7 +30,7 @@ before(async () => {
     setTimeout(() => reject(new Error('daemon start timeout')), 5000);
   });
 });
-after(() => { daemon?.kill(); fs.rmSync(cwd, { recursive: true, force: true }); });
+after(() => { daemon?.kill(); fs.rmSync(cwd, { recursive: true, force: true }); fs.rmSync(LOG_DIR, { recursive: true, force: true }); });
 
 /** hook-handler를 실제 hook처럼 실행: stdin JSON → stdout 출력 */
 function hook(payload, extraEnv = {}) {
@@ -265,6 +266,19 @@ test('/api/key: 1~3 범위의 비정수는 409, 대기 요청을 소비하지 �
   assert.equal((await state()).sessions.flatMap((s) => s.pending).length, 1, '요청이 남아 있어야 함');
   await post('/api/key', { key: 3 });
   assert.equal(JSON.parse((await done).out).hookSpecificOutput.decision.behavior, 'deny');
+});
+
+test('파일 로그: daemon.log 에 이벤트·결정, hook.log 에 결정과 소요 시간이 남는다', () => {
+  const d = fs.readFileSync(path.join(LOG_DIR, 'daemon.log'), 'utf8');
+  assert.match(d, /\[INFO\] \[daemon\] 시작 pid=\d+/);
+  assert.match(d, /\[INFO\] \[hook\] SessionStart sid=S1/);
+  assert.match(d, /\[INFO\] \[perm\] 응답 always→once req=/, '강등이 로그에 남는다');
+  assert.match(d, /\[WARN\] \[http\] 403 POST \/api\/key/);
+  assert.match(d, /\[INFO\] \[ws\] 접속 /);
+  const h = fs.readFileSync(path.join(LOG_DIR, 'hook.log'), 'utf8');
+  assert.match(h, /PermissionRequest sid=S1 tool=Bash → once \(\d+\.\ds\)/);
+  assert.match(h, /PermissionRequest sid=S1 tool=WebFetch → deny/);
+  assert.match(h, /→ 데몬 413 .* — 무시/);
 });
 
 test('데몬이 없으면 hook은 무출력 exit 0 (fail-open)', async () => {
