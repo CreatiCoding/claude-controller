@@ -34,6 +34,12 @@ test('Bash: sudo/env/timeout/npx 같은 래퍼와 uv run 같은 러너는 규칙
   assert.equal(ruleForRequest(bash('uv run python x.py')), null);
   assert.equal(ruleForRequest(bash('docker exec c sh')), null);
   assert.equal(ruleForRequest(bash('uv sync')), 'Bash(uv sync *)', '러너가 아닌 서브명령은 그대로');
+  assert.equal(ruleForRequest(bash('pipx run cowsay hi')), null);
+  assert.equal(ruleForRequest(bash('uvx cowsay')), null);
+  assert.equal(ruleForRequest(bash('uv tool run cowsay')), null);
+  assert.equal(ruleForRequest(bash('bunx cowsay')), null);
+  assert.equal(ruleForRequest(bash('bun x cowsay')), null);
+  assert.equal(ruleForRequest(bash('bun install')), 'Bash(bun install *)');
   assert.equal(ruleForRequest(bash('env FOO=1 ls')), null);
   assert.equal(ruleForRequest(bash('bash -c ls')), null);
 });

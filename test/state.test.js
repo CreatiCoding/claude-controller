@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Store, SessionStatus } from '../src/state.js';
+import { Store, SessionStatus, trimString } from '../src/state.js';
 
 const perm = (store, sid, command = 'ls') =>
   new Promise((resolve) => store.addPending({ sessionId: sid, payload: { tool_name: 'Bash', tool_input: { command } }, resolve }));
@@ -73,6 +73,19 @@ test('종료 후 늦은 이벤트는 무시되고 TTL에 제거되며, start 이
   assert.equal(store.sessions.get('C').status, SessionStatus.WORKING);
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(store.sessions.has('C'), true, '되살아난 세션은 TTL 삭제되지 않음');
+});
+
+test('스냅샷 트리밍: 깊이 초과는 대체 문자열, 배열 초과는 개수 표시, 서로게이트 보호', () => {
+  const store = new Store();
+  let deep = { s: 'y'.repeat(5000) };
+  for (let i = 0; i < 10; i++) deep = { n: deep };
+  store.addPending({ sessionId: 'A', payload: { tool_name: 'X', tool_input: { deep, arr: Array.from({ length: 250 }, (_, i) => i) } }, resolve() {} });
+  const snap = store.snapshot().sessions[0].pending[0].toolInput;
+  assert.ok(JSON.stringify(snap).length < 2000, '9단계 이상 중첩 안의 5000자가 그대로 나가지 않음');
+  assert.equal(snap.arr.length, 201);
+  assert.match(snap.arr[200], /\+50개/);
+  const t = trimString('a'.repeat(3999) + '🙂' + 'b'.repeat(100));
+  assert.ok(!/[\uD800-\uDBFF]…/.test(t));
 });
 
 test('resume 후 재종료하면 TTL이 재종료 시점부터 다시 센다', async () => {
