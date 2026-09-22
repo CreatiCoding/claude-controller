@@ -20,7 +20,34 @@
 
 > 물리 버튼(매크로패드)으로도 조작하고 싶다면 → [ADVANCED_MACROPAD.md](ADVANCED_MACROPAD.md)
 
-## 준비하기 (처음 한 번만, 5분)
+## 빠른 시작 (npx, 클론 없이)
+
+```bash
+npx @creaticoding/claude-controller install-hooks   # hook 등록 (handler는 ~/.claude-controller/에 복사)
+npx @creaticoding/claude-controller start           # 데몬 실행
+npx @creaticoding/claude-controller doctor          # 새 환경에서 잘 될지 진단
+```
+
+`yarn dlx @creaticoding/claude-controller <명령>`도 같다. 명령: `doctor` / `start` / `install-hooks` /
+`uninstall-hooks` / `shell-init`(cl 함수 출력, `eval "$(npx @creaticoding/claude-controller shell-init)"`).
+설정은 `~/.claude-controller/config.json`(리포로 쓸 때는 리포 루트 `config.json`이 우선).
+
+### doctor — 환경 진단
+
+새 맥이나 다른 환경에서 "왜 안 되지?"를 한 번에 본다. 실패(❌)가 있으면 종료 코드 1, `--json`으로 기계가 읽는 출력.
+
+| 검사 | 확인하는 것 |
+| --- | --- |
+| Node.js / Claude Code CLI | 버전·경로 |
+| 대시보드 빌드 | `dist/index.html` 존재 |
+| config.json | 파싱 가능, `0.0.0.0` 경고 |
+| hook 등록 | 5개 이벤트 등록, hook 명령 안의 **node 절대경로가 아직 존재**하는지(brew upgrade로 사라지면 hook이 조용히 죽는다), handler 파일 존재, 복사본이 최신인지, hook 포트 = 데몬 포트, hook 타임아웃 ≥ 대기 시간 |
+| 데몬 | `127.0.0.1:포트` 응답 여부, 포트를 다른 프로세스가 점유했는지 |
+| hook → 데몬 왕복 | 실제 hook-handler로 SessionStart를 보내 데몬에 도착하는지 (자동으로 정리) |
+| 폰 연결 경로 | Wi-Fi 인터페이스 식별(제외 대상), 아이폰 테더링 인터페이스 감지(Wi-Fi에만 있으면 경고), adb 기기 |
+| 선택 도구 | tmux, Karabiner 규칙 복사 여부, rc 파일의 `cl.sh` source |
+
+## 준비하기 (리포로 쓸 때, 처음 한 번만 5분)
 
 **1. 맥에 필요한 것 설치**
 
@@ -150,8 +177,11 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
 ## 제거
 
 ```bash
-node scripts/uninstall-hooks.js   # ~/.claude/settings.json에서 이 리포의 hook만 제거
+node scripts/uninstall-hooks.js                        # 리포에서
+npx @creaticoding/claude-controller uninstall-hooks    # npx로 설치했다면
 ```
+
+`~/.claude/settings.json`에서 이 도구의 hook만 제거한다. `~/.claude-controller/`(복사된 handler·cl.sh·config)는 직접 지운다.
 
 설치 시 만든 백업은 `~/.claude/settings.json.claude-controller.bak`(재설치마다 덮어씀).
 

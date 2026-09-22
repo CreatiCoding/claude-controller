@@ -55,8 +55,12 @@
 - `src/state.js` — 세션/허가요청 인메모리 스토어
 - `src/permissions.js` — "항상 예" allow 규칙 생성·기록
 - `src/tmux.js` / `src/adb.js` — tmux 주입, adb reverse 재시도
-- `bin/hook-handler.js` — Claude Code hook이 실행하는 스크립트 (stdin JSON → 데몬)
-- `scripts/install-hooks.js` — `~/.claude/settings.json`에 hook 등록(재실행 시 갱신, 백업 생성)
+- `bin/hook-handler.js` — Claude Code hook이 실행하는 스크립트 (stdin JSON → 데몬). 의존성 없음(복사돼도 동작)
+- `bin/claude-controller.js` — CLI 진입점(npm `bin`). doctor/start/install-hooks/uninstall-hooks/shell-init
+- `src/doctor.js` — 환경 진단. 각 검사가 `{name,status,detail,fix}`를 돌려주고 `formatChecks`가 출력
+- `src/hooks-install.js` — hook 등록/제거 로직. npx/dlx 같은 임시 경로면 handler·cl.sh를
+  `~/.claude-controller/`에 복사해 그 경로를 등록(캐시가 지워져도 hook이 살아 있게)
+- `scripts/install-hooks.js` — 위 로직의 얇은 래퍼(리포 사용자용)
 - `web/` — React + Vite 대시보드 (yarn dev / yarn build)
 - `karabiner/claude-controller.json` — F19~F24 → `/api/key` 매핑 (매크로패드용)
 - `hammerspoon/init.lua` — Karabiner를 못 쓰는 환경용 대체재
@@ -65,7 +69,11 @@
 
 ## 작업 시 주의
 
-- 대시보드 UI 수정 후 `yarn build` 해야 데몬(`dist/` 서빙)에 반영된다.
+- 대시보드 UI 수정 후 `yarn build` 해야 데몬(`dist/` 서빙)에 반영된다. npm 패키지는 `prepack`이
+  빌드해 `dist/`를 동봉한다(`files` 필드). 패키지명은 `@creaticoding/claude-controller`
+  (`claude-controller`는 npm에 다른 패키지가 있음).
+- config는 리포 루트 `config.json` → `~/.claude-controller/config.json` 순. hook 명령의 포트 env도
+  같은 순서로 읽는다(`hooks-install.js readConfigPort`).
 - 데몬은 127.0.0.1 + 폰 USB 테더링 대역에만 바인딩할 것 (인증 없는 승인 API이므로
   외부 인터페이스에 열면 안 됨). 테더링 감지는 IP 프리픽스 기준이라 Wi-Fi 인터페이스는
   `excludeInterfaces`로 제외한다(아이폰 핫스팟 Wi-Fi 합류 시 같은 대역이 뜬다).

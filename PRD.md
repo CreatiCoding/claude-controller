@@ -101,6 +101,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-22 | hook 타임아웃: PermissionRequest 3600초, 나머지 10초. hook-handler 자체 fetch 타임아웃은 허가 1시간, 그 외 3초 | 구현 |
 | F-23 | `scripts/uninstall-hooks.js`로 이 리포의 hook만 제거(command에 `hook-handler.js` 포함 항목). 백업은 만들지 않는다 | 구현 |
 | F-24 | yarn/corepack이 없는 환경(node 25+)에서도 설치가 완주한다(`npx corepack` 폴백) | 구현·검증 |
+| F-30 | **CLI 패키징**: `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로 클론 없이 사용. 명령은 `doctor`·`start`·`install-hooks`·`uninstall-hooks`·`shell-init`·`help`. npm 패키지는 `dist/`를 동봉(`prepack`에서 빌드). npx/dlx 캐시처럼 임시 경로에서 `install-hooks`를 실행하면 handler와 cl.sh를 `~/.claude-controller/`에 복사해 그 경로를 등록한다(캐시가 지워져도 hook이 살아 있게). `--copy`/`--no-copy`로 강제. 설정은 `~/.claude-controller/config.json`(리포 루트가 우선) | 구현·검증(tarball 설치 후 npx로 install-hooks·doctor 실행, 격리 HOME 테스트 7개) |
+| F-31 | **doctor**: 새 환경에서 동작할지 진단. Node 버전, claude CLI, dist 존재, config 파싱·`0.0.0.0` 경고, hook 5개 이벤트 등록, hook 명령의 node 절대경로 존재, handler 존재·복사본 최신 여부, hook 포트=데몬 포트, hook 타임아웃≥대기 시간, 데몬 응답·포트 점유 프로세스, **실제 hook-handler로 SessionStart 왕복**(자동 정리), Wi-Fi 인터페이스 식별, 테더링 인터페이스(Wi-Fi에만 있으면 경고), adb 기기, tmux, Karabiner 규칙, rc의 cl.sh source. 실패가 있으면 종료 코드 1, `--json` 출력 | 구현·검증(데몬 유무 양쪽, 포트 불일치·오래된 복사본 감지 테스트) |
 | F-25 | `cl` 셸 함수: tmux 밖이면 프로젝트별 tmux 세션(`claude-<폴더명>`, 특수문자는 `_`)을 만들어 claude 실행, 같은 폴더에서 재실행하면 기존 세션에 재접속(이때 전달한 인자는 무시됨), 이미 tmux 안이면 그냥 `claude`. 인자는 tmux 경유 시 공백 기준으로 합쳐진다. tmux 없으면 경고 후 plain claude. 모델은 지정하지 않는다 | 구현 |
 
 ### 5.4 다이얼 액션 (P1, 선택)
@@ -175,7 +177,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 
 ## 9. 검증 (2026-09-22)
 
-- **자동 테스트** `yarn test` 32개: 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
+- **자동 테스트** `yarn test` 39개(CLI·doctor 7개 포함): 규칙 생성(서브명령·env 대입·복합 명령·래퍼·WebFetch), 규칙 파일 병합·중복·파싱 실패 보존, 상태 저장소(다중 대기, 종료 시 정리, TTL, 늦은 이벤트 무시·resume 복구, 정렬), 데몬 통합(임의 포트에 데몬 spawn → 실제 hook-handler로 SessionStart/once/always/규칙 없음 강등/cwd 없음 강등과 응답 일치/deny/passthrough/중복 응답/키 1/WebSocket 브로드캐스트/permission_prompt 상태/다이얼 tmux 실패/CSRF 415·403·같은 Origin/400/413/Stop/SessionEnd/미인식 이벤트 로그/늦은 Stop/resume/데몬 없음 fail-open). 2차 감사 반영분(CSRF, 강등 시점, permission_prompt, 늦은 이벤트) 포함 전부 통과.
 - **실기기 엔드투엔드 ×2**: 실제 Claude Code 세션(`claude -p`)에서 Bash 허가 요청이 5초 내 데몬에 도착 → API 응답 → 명령 실행·정상 종료. 1회차는 프로젝트 스코프 hook, 2회차는 `install.sh`가 등록한 **사용자 스코프 hook 그대로**, "항상 예"로 `Bash(touch *)` 규칙 기록까지 확인.
 - **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주.
 - **테스트로 잡은 버그**: 종료 시 남은 허가 요청을 정리하면 상태가 `working`으로 되돌아가던 문제(정리 순서) 수정.
