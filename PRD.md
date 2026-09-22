@@ -71,7 +71,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-2 | 대시보드에 프로젝트명(cwd 마지막 세그먼트, cwd 없으면 세션 id 앞 8자), 도구별 질문 문구(Bash "이 명령을 실행할까요?", Edit/Write/NotebookEdit "파일을 수정할까요?", Read "파일을 읽을까요?", WebFetch "이 주소를 가져올까요?", 그 외 "<도구> 사용을 허용할까요?"), 상세(command → file_path → url → permissionType → JSON 순 폴백)를 카드로 표시한다 | 구현 |
 | F-3 | **예** → `allow`, **아니오** → `deny`(사유 메시지 포함), **터미널에서 응답** → 무출력(passthrough) | 구현·검증 |
 | F-4 | **항상 예** → 해당 프로젝트 `.claude/settings.local.json`의 `permissions.allow`에 규칙을 기록한 뒤 `allow`. 규칙을 못 만들거나 기록에 실패(cwd 없음·삭제됨, 파일 파싱 실패, 읽기 전용·권한 없음 등 쓰기 예외)하면 `once`로 강등하고 로그를 남긴다. 사라진 cwd를 되살리지 않는다. 강등은 폰에 응답을 돌려주기 전에 결정되어 `/api/respond` 응답·데몬 로그·hook 출력이 같은 값을 본다 | 구현·검증(규칙 없음·cwd 없음 경로 테스트, 파싱 실패는 단위 테스트) |
-| F-5 | 규칙 생성: Bash는 `Bash(<명령> *)`, 서브명령을 갖는 고정 목록(git/npm/pnpm/yarn/npx/docker/kubectl/cargo/go/brew/make/adb/tmux/gh/pip/pip3/poetry/uv)은 `Bash(<명령> <서브명령> *)`(두 번째 토큰이 `-`로 시작하면 제외). 선행 `KEY=val`(`FOO=1 make test`)만 벗기고 중간의 `KEY=val`(`make VERBOSE=1 test`)은 인자로 남긴다(빼면 규칙이 원 명령에 프리픽스 매치되지 않아 "다시 묻지 않기"가 무효가 된다). `\|`, `&`, `;`, `<`, `>`, 백틱, `$`, `(`, `)`, 개행 중 하나라도 포함된 복합 명령과 래퍼 명령(sudo/env/time/nohup/nice/xargs/exec/sh/bash/zsh/eval/source/`.`)은 규칙 없음. WebFetch는 `WebFetch(domain:<host>)`, URL 파싱 실패 시 `WebFetch`. 그 외 도구는 도구명. `tool_name`·`permission_type`이 모두 없으면 규칙 없음(once 강등) | 구현·검증 |
+| F-5 | 규칙 생성: Bash는 `Bash(<명령> *)`, 서브명령을 갖는 고정 목록(git/npm/pnpm/yarn/npx/docker/kubectl/cargo/go/brew/make/adb/tmux/gh/pip/pip3/poetry/uv)은 `Bash(<명령> <서브명령> *)`(두 번째 토큰이 `-`로 시작하면 제외). 선행 `KEY=val`(`FOO=1 make test`)만 벗기고 중간의 `KEY=val`(`make VERBOSE=1 test`)은 인자로 남긴다(빼면 규칙이 원 명령에 프리픽스 매치되지 않아 "다시 묻지 않기"가 무효가 된다). `\|`, `&`, `;`, `<`, `>`, 백틱, `$`, `(`, `)`, 개행 중 하나라도 포함된 복합 명령과 래퍼 명령(sudo/doas/su/env/time/timeout/nohup/nice/xargs/exec/command/builtin/sh/bash/zsh/eval/source/`.`/watch/chroot/npx), 그리고 뒤에 오는 프로그램을 통째로 여는 러너 2토큰(uv run, poetry run, pipx run, yarn exec/dlx, npm exec, pnpm exec/dlx, go run, cargo run, docker run/exec, kubectl exec/run)은 규칙 없음. WebFetch는 `WebFetch(domain:<host>)`, URL 파싱 실패 시 `WebFetch`. 그 외 도구는 도구명. `tool_name`·`permission_type`이 모두 없으면 규칙 없음(once 강등) | 구현·검증 |
 | F-6 | 대기 타임아웃(기본 300초, 실질 상한 3600초 = hook 타임아웃) 초과 시 passthrough | 구현 |
 | F-7 | hook 연결이 먼저 끊기면(세션 강제 종료) 유령 요청을 즉시 정리 | 구현 |
 | F-8 | 요청이 여러 개면 각각 독립 카드·독립 응답. 카드 순서는 세션(최근 활동 순) → 세션 안에서 오래된 순이므로 폰 최상단 카드는 사실상 가장 최근 요청. 매크로패드 1~3번은 전역에서 가장 오래된 요청에 적용 — 둘이 다를 수 있다 | 구현·검증 |
@@ -85,7 +85,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-11 | `Stop` → 완료(대기 카드는 유지; 남은 요청이 해소되면 `working`으로 돌아감), `Notification(idle_prompt, agent_needs_input)` → 입력 대기 + 마지막 메시지 1줄. `Notification(permission_prompt)`는 그 세션에 우리 hook이 잡고 있는 요청이 없을 때만(passthrough·타임아웃 뒤 터미널 프롬프트) 입력 대기. 그 외 Notification은 메시지만 갱신 | 구현·검증 |
 | F-12 | WebSocket으로 상태 변경 즉시 푸시(한 틱 내 변경은 1회로 병합), 초기 접속 시 스냅샷 전송, 끊기면 1초→2배→최대 15초 백오프 재접속 | 구현·검증(스냅샷·브로드캐스트만 테스트, 병합·백오프는 코드 확인) |
 | F-13 | 허가 대기 중 배경 전체 점멸(0.5초 주기, 주황) + 대기 요청 수가 늘어날 때마다 진동(지원 기기) | 구현 |
-| F-14 | 화면 꺼짐 방지(Wake Lock: 진입·탭 복귀·첫 터치 시 재획득), iOS PWA 전체화면·세로 고정·safe-area(다이나믹 아일랜드) 대응 | 구현 |
+| F-14 | 화면 꺼짐 방지(Wake Lock: 진입·탭 복귀·첫 터치 시 재획득), iOS PWA 전체화면·safe-area(다이나믹 아일랜드) 대응. 매니페스트의 세로 고정은 안드로이드 Chrome만 적용(iOS Safari는 무시) | 구현 |
 | F-15 | 세션 행에 모델(다이얼로 바꾼 경우만), 확장 사고 추정 상태, tmux 여부 중 하나라도 있으면 메타 행 표시 | 구현 |
 | F-16 | 미인식 hook 이벤트, `session_id` 없는 페이로드는 데몬 로그에 남긴다(스키마 변경 감지) | 구현·검증(로그 문자열까지 테스트) |
 
@@ -117,7 +117,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | ID | 요구사항 | 상태 |
 | --- | --- | --- |
 | N-1 | **Fail-open**: 데몬 미실행, 타임아웃, 파싱 실패, non-2xx 응답 등 어떤 장애에서도 hook은 무출력 종료(exit 0)하여 Claude Code 기본 동작에 간섭하지 않는다 | 구현·검증 |
-| N-2 | **보안**: 승인 API에 인증이 없으므로 루프백과 폰 USB 테더링 대역 외에는 바인딩하지 않는다. Wi-Fi 인터페이스는 대역이 맞아도 제외. `0.0.0.0` 설정 시 경고. **CSRF 방어**: 모든 POST는 `Content-Type: application/json`이어야 하고(아니면 415, preflight 없는 text/plain simple request 차단), 모든 POST와 **WebSocket 업그레이드**(`/ws`, 동일 출처 정책이 없어 임의 사이트가 스냅샷을 읽을 수 있음)는 요청의 `Host`와 (있다면) `Origin`의 host가 모두 **허용 목록**(루프백 별칭 `127.0.0.1`·`localhost`·`[::1]` + 현재 listen 중인 테더링 주소 + 고정 `host`; `host:'0.0.0.0'`이면 이 머신의 모든 IPv4; 각각 `:port` 포함, 80/443이면 포트 생략형도)에 있어야 한다(아니면 403 + 데몬 로그에 사유). 요청의 Host 헤더와 Origin을 서로 비교하는 방식은 DNS 리바인딩(evil.example → 127.0.0.1)으로 둘을 같게 만들 수 있어 쓰지 않는다. `Origin: null`과 파싱 불가 Origin도 403 — 맥 브라우저나 adb reverse된 폰 브라우저에 열린 임의 사이트가 루프백으로 승인 요청을 쏘는 경로를 막는다. 요청 본문 제한: API는 1MB, `/hook/event`는 8MB(Write/NotebookEdit의 content 전문 대비), 초과 시 413. 정적 파일은 `dist/` 밖 경로 탈출 차단(구분자 포함 검사) | 구현·검증(CSRF·WS 거부·413·400 테스트; `0.0.0.0` 전체 IPv4와 80/443 포트 생략 분기는 코드 확인) |
+| N-2 | **보안**: 승인 API에 인증이 없으므로 루프백과 폰 USB 테더링 대역 외에는 바인딩하지 않는다. Wi-Fi 인터페이스는 대역이 맞아도 제외. `0.0.0.0` 설정 시 경고. **CSRF 방어**: 모든 POST는 `Content-Type: application/json`이어야 하고(아니면 415, preflight 없는 text/plain simple request 차단), **모든 HTTP 요청**(GET `/api/state`·정적 페이지 포함 — DNS 리바인딩된 페이지는 같은 출처라 폴링으로 스냅샷을 읽을 수 있음)과 **WebSocket 업그레이드**는 요청의 `Host`와 (있다면) `Origin`의 host가 모두 **허용 목록**(루프백 별칭 `127.0.0.1`·`localhost`·`[::1]` + 현재 listen 중인 테더링 주소 + 고정 `host`; `host:'0.0.0.0'`이면 이 머신의 모든 IPv4; 각각 `:port` 포함, 80/443이면 포트 생략형도)에 있어야 한다(아니면 403 + 데몬 로그에 사유). 요청의 Host 헤더와 Origin을 서로 비교하는 방식은 DNS 리바인딩(evil.example → 127.0.0.1)으로 둘을 같게 만들 수 있어 쓰지 않는다. `Origin: null`과 파싱 불가 Origin도 403 — 맥 브라우저나 adb reverse된 폰 브라우저에 열린 임의 사이트가 루프백으로 승인 요청을 쏘는 경로를 막는다. 요청 본문 제한(바이트 기준, 청크를 Buffer로 세고 끝에서 한 번에 UTF-8 디코드): API는 1MB, `/hook/event`는 8MB(Write/NotebookEdit의 content 전문 대비), 초과 시 413. 본문이 JSON 객체가 아니면(`null`, 배열, 문자열) 400. 정적 파일은 `dist/` 밖 경로 탈출 차단(구분자 포함 검사) | 구현·검증(CSRF·WS 거부·413·400 테스트; `0.0.0.0` 전체 IPv4와 80/443 포트 생략 분기는 코드 확인) |
 | N-3 | **네트워크 독립**: 폰-맥 통신은 USB 터널(iOS 테더링 인터페이스 / adb reverse)만 사용. 감지는 IP 프리픽스 기준이라 N-2의 Wi-Fi 제외로 보완한다 | 구현 |
 | N-4 | **팀 영향 없음**: "항상 예" 규칙은 gitignore 대상인 `settings.local.json`에만 기록 | 구현·검증 |
 | N-5 | **최소 의존성**: 런타임 의존성은 `ws` 하나. tmux·adb·Karabiner/Hammerspoon은 선택. 대시보드는 tmux 없이도 동작(문구도 그렇게 안내) | 구현 |
@@ -134,9 +134,9 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | `GET /api/state` | 폰 → 데몬 | `{sessions, now}` (`type` 없음) |
 | 세션 스키마 | — | `id, cwd, status(working\|waiting\|input\|idle\|ended), model, thinking, hasTmux, lastEvent, lastMessage, startedAt, updatedAt, pending[{id, toolName, toolInput, permissionType, createdAt}]` |
 | `POST /api/respond` | 폰 → 데몬 | `{id, decision: once\|always\|deny\|passthrough}` → 200 `{ok, decision, rule}`(always가 once로 강등되면 여기서부터 once); decision 값 오류 400 |
-| `POST /api/key` | 매크로패드 → 데몬 | `{key: 1~6 정수}` → 200 / 실패(대기 없음, 범위 밖, NaN, 비정수) 409 |
+| `POST /api/key` | 매크로패드 → 데몬 | `{key: 1~6 정수}`(숫자형만, `"1"`·`true`는 강제 변환 없이 거부) → 200 / 실패(대기 없음, 범위 밖, 비숫자, 비정수) 409 |
 | `POST /api/action` | 폰/매크로패드 → 데몬 | `{action, sessionId?}` → 200 `{ok, …}`(tmux 실패 포함) |
-| 공통 POST 오류 | — | 415(Content-Type 아님), 403(허용 목록 밖 Host/Origin, `Origin: null`, 파싱 불가 Origin), 400(JSON 아님), 413(1MB 초과), 500(그 외 예외) |
+| 공통 오류 | — | 403(모든 요청: 허용 목록 밖 Host/Origin, `Origin: null`, 파싱 불가 Origin), 415(POST: Content-Type 아님), 400(JSON 아님 또는 객체 아님), 413(API 1MB·hook 8MB 바이트 초과), 500(그 외 예외) |
 | 개발 프록시 | — | vite는 `changeOrigin`으로 Host를, `headers.origin`으로 Origin을 `127.0.0.1:9200`으로 바꿔 보낸다(위 검사를 통과하기 위해) |
 | `GET /*` | 폰 | `dist/` 정적 서빙. 빌드가 없으면 `/`에 503 + 안내 |
 | `config.json` | 사용자 → 데몬 | `host, port, autoBindSubnets, excludeInterfaces, permissionWaitSeconds, modelCycle, thinkingToggleKey, endedSessionTtlSeconds, adb.{enabled, intervalSeconds}`. 배열은 통째로 교체. 파싱 실패 시 기본값 + 로그. gitignore 대상 |
@@ -164,7 +164,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - **다른 호스트명으로 대시보드를 열면**(`mymac.local:9200` 등) 허용 목록 밖이라 WebSocket부터 403으로 끊긴다 → 세션이 하나도 안 보이는 빈 화면 + 빨간 접속 점, 누를 버튼이 없으니 오류 띠도 없다. 대시보드는 최대 15초 간격으로 재접속을 반복하므로 그 탭을 닫을 때까지 데몬 로그에 `[ws] 거부`가 반복된다. `host:'0.0.0.0'`은 이 머신의 IPv4를 전부 허용하지만 호스트명은 여전히 불가.
 - **POST 실패 시 폰 표시**: `/api/respond` 실패(403/500/네트워크)는 상단 오류 띠로 알리고 카드는 남는다. 다시 누르면 재시도. 더블탭·이미 처리된 요청은 200 `{ok:false}`라 띠 없이 카드만 사라진다.
 - **hook 페이로드가 8MB를 넘으면**(초대형 Write content) 413 → hook은 무출력 종료 → 폰에 안 뜨고 터미널 프롬프트로 간다. 데몬 로그에 `[hook] 413 …` 한 줄을 남긴다.
-- **스냅샷은 표시용으로 트리밍**: `toolInput`의 문자열 필드와 `lastMessage`는 4000자에서 잘라 보낸다(`… (+N자)`). 규칙 생성은 원본을 쓴다. 폰이 매 브로드캐스트마다 수 MB JSON을 파싱하지 않게 하기 위해서다.
+- **스냅샷은 표시용으로 트리밍**: `toolInput`의 문자열은 중첩 객체·배열(MultiEdit `edits[]`, MCP 입력) 안까지 재귀로(깊이 8, 배열 200개), `lastMessage`도 같은 방식으로 4000자에서 잘라 `… (+N자)`를 붙인다. 서로게이트 쌍 중간에서는 자르지 않는다. 규칙 생성은 원본을 쓴다.
 - **요청 본문은 UTF-8로 디코드**: 청크 경계에서 한글·이모지가 깨지지 않는다.
 - **adb도 PATH 의존**: 데몬 PATH에 adb가 없으면 "찾지 못함"으로 판정하고 재시도를 영구 중단한다(tmux는 호출마다 실패). launchd 등 축소 PATH로 띄웠다면 PATH를 넓혀 재시작.
 - **종료 세션이 허가 요청으로 되살아날 때** 새 `cwd`·`tmuxPane`이 **있으면** 그 값으로 갱신된다(pane이 바뀐 resume). tmux 밖에서 resume해 `tmuxPane`이 없으면 옛 pane이 남아 `hasTmux`가 참으로 보이고 다이얼은 옛 pane으로 간다(다음 SessionStart hook이 오면 정리됨).
@@ -180,7 +180,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - **설치**: node 26(corepack 없음) 환경에서 `install.sh` 4단계 완주.
 - **테스트로 잡은 버그**: 종료 시 남은 허가 요청을 정리하면 상태가 `working`으로 되돌아가던 문제(정리 순서) 수정.
 - **미검증**(실기기·환경 필요): 아이폰 USB 테더링 인터페이스 실제 감지, Wi-Fi 제외의 실제 동작, tmux 다이얼 주입(성공 경로), 안드로이드 adb reverse(연결 경로), iOS Wake Lock·PWA 동작, WebSocket 백오프 재접속.
-- **2~6차 감사 반영분**: `yarn test` 31개 통과(멀티바이트 본문·스냅샷 트리밍·비정수 키·hook 413 로그·중간 KEY=val 인자 포함, WebSocket Origin 거부, hook 본문 8MB·초과 passthrough, 소생 시 cwd/pane 갱신 포함). DNS 리바인딩 Host 위조는 `fetch()`가 Host 헤더를 버리므로 `node:http` + `setHost:false`로 실제 헤더를 보내 검증(evil.example 403, LOCALHOST·[::1] 통과, 포트 생략 403). `Origin: null` 거부, 쓰기 예외 강등, 종료 세션 늦은 이벤트 완전 무시, 중복 SessionEnd 불변, 종료 세션 허가 요청 소생, resume 후 재종료 TTL 포함. `yarn build` 성공 확인(2026-09-22).
+- **미검증(Claude Code 매처 동작)**: 선행 env를 벗긴 규칙(`FOO=1 make test` → `Bash(make test *)`)이 실제로 `FOO=1 make test`에 매치되는지는 Claude Code의 permissions 매처가 선행 env 대입을 정규화하는지에 달렸다. 순수 프리픽스 매치라면 이 규칙은 무효(다음에 다시 묻는다)이며, 그 경우 선행 env 명령도 once로 강등하는 편이 일관된다.
+- **2~7차 감사 반영분**: `yarn test` 31개 통과(GET /api/state Host 검사·바이트 한도(한글 1.2MB 413)·객체 아닌 본문 400·키 타입·래퍼/러너 확장·중첩 트리밍 포함, 멀티바이트 본문·스냅샷 트리밍·비정수 키·hook 413 로그·중간 KEY=val 인자 포함, WebSocket Origin 거부, hook 본문 8MB·초과 passthrough, 소생 시 cwd/pane 갱신 포함). DNS 리바인딩 Host 위조는 `fetch()`가 Host 헤더를 버리므로 `node:http` + `setHost:false`로 실제 헤더를 보내 검증(evil.example 403, LOCALHOST·[::1] 통과, 포트 생략 403). `Origin: null` 거부, 쓰기 예외 강등, 종료 세션 늦은 이벤트 완전 무시, 중복 SessionEnd 불변, 종료 세션 허가 요청 소생, resume 후 재종료 TTL 포함. `yarn build` 성공 확인(2026-09-22).
 
 ## 10. 리스크
 
