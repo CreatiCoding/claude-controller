@@ -117,6 +117,6 @@ test('logs: 데몬·hook 로그 끝부분을 보여주고, doctor가 로그 경�
   assert.equal(logChecks.find((c) => c.name === '로그 daemon.log').status, 'ok');
 });
 
-test('shell-init은 cl 함수를 출력한다', () => {
+test('shell-init은 ccode 함수를 출력한다', () => {
   assert.match(run(['shell-init']).stdout, /^ccode\(\) \{/m);
 });

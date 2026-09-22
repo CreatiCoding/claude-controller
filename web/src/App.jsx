@@ -161,7 +161,7 @@ export default function App() {
       <main>
         {error ? <div className="error">{error}</div> : null}
         {!sessions.length ? (
-          <div className="empty">활성 세션이 없습니다.<br />맥에서 claude를 실행하세요 (다이얼 기능만 tmux 필요 — <code>cl</code>).</div>
+          <div className="empty">활성 세션이 없습니다.<br />맥에서 claude를 실행하세요 (다이얼 기능만 tmux 필요 — <code>ccode</code>).</div>
         ) : (
           <>
             {pending.map((p) => <AskCard key={p.id} p={p} />)}
