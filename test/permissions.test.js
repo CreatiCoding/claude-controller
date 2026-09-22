@@ -38,6 +38,10 @@ test('Bash: sudo/env/timeout/npx 같은 래퍼와 uv run 같은 러너는 규칙
   assert.equal(ruleForRequest(bash('npx cowsay hi')), null);
   assert.equal(ruleForRequest(bash('uv run python x.py')), null);
   assert.equal(ruleForRequest(bash('docker exec c sh')), null);
+  for (const c of ['npm x cowsay', 'cargo r', 'docker container exec c sh', 'docker compose run web sh']) {
+    assert.equal(ruleForRequest(bash(c)), null, `러너 별칭·상위 서브명령: ${c}`);
+  }
+  assert.equal(ruleForRequest(bash('   ')), null, '공백만 있는 command');
   assert.equal(ruleForRequest(bash('uv sync')), 'Bash(uv sync *)', '러너가 아닌 서브명령은 그대로');
   assert.equal(ruleForRequest(bash('pipx run cowsay hi')), null);
   assert.equal(ruleForRequest(bash('uvx cowsay')), null);

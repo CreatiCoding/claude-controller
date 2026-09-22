@@ -18,8 +18,10 @@ const WRAPPER_CMDS = new Set([
 ]);
 // "<명령> <서브명령>" 2토큰 규칙이 뒤에 오는 프로그램을 통째로 여는 러너 — 규칙을 만들지 않는다
 const RUNNER_PAIRS = new Set([
-  'uv run', 'uv tool', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
-  'bun x', 'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
+  'uv run', 'uv tool', 'poetry run', 'yarn exec', 'yarn dlx', 'npm exec', 'npm x', 'pnpm exec', 'pnpm dlx',
+  'bun x', 'go run', 'cargo run', 'cargo r', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
+  // 3토큰 형태(docker container exec, docker compose run)는 2토큰 규칙이 exec/run을 통째로 연다
+  'docker container', 'docker compose',
 ]);
 // 러너 서브명령을 가진 명령들. 이들은 1토큰 광역 규칙(`Bash(docker *)`)이 러너를 통째로 열므로,
 // 단독 호출이나 옵션 선행처럼 2토큰 규칙을 못 만드는 경우 규칙을 만들지 않는다.
@@ -34,6 +36,7 @@ export function ruleForRequest({ toolName, toolInput, permissionType }) {
     // command가 없는 Bash 요청(스키마 변동 등)에 도구명 규칙 `Bash`를 내면 모든 Bash가 열린다
     if (!toolInput?.command) return null;
     const command = String(toolInput.command).trim();
+    if (!command) return null; // 공백만 있으면 `Bash( *)`가 만들어진다
     // 파이프·체인·리다이렉트·서브셸이 섞인 복합 명령은 첫 토큰만으로 의도를 대표할 수 없다
     // (예: `cd x && git push` → `Bash(cd *)`가 되면 cd로 시작하는 모든 명령이 열린다). 1회 승인으로 강등.
     if (/[|&;<>`$()\n]/.test(command)) return null;
