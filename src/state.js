@@ -39,8 +39,13 @@ export class Store {
       };
       this.sessions.set(sessionId, s);
     }
+    // 종료된 세션에 늦게 도착한 Stop/Notification은 상태를 되살리지 않는다(카드가 영구 잔존하는
+    // 원인). 같은 id로 SessionStart가 다시 오면(resume) 종료를 해제한다.
+    if (s.endedAt && String(patch.lastEvent ?? '').startsWith('start:')) delete s.endedAt;
     for (const [k, v] of Object.entries(patch)) {
-      if (v !== undefined && v !== null) s[k] = v;
+      if (v === undefined || v === null) continue;
+      if (k === 'status' && s.endedAt) continue;
+      s[k] = v;
     }
     this.#touch(s);
     return s;
@@ -55,10 +60,11 @@ export class Store {
       if (p.sessionId === sessionId) this.resolvePending(p.id, { decision: 'passthrough' });
     }
     s.status = SessionStatus.ENDED;
+    s.endedAt = Date.now();
     s.lastEvent = `ended:${reason ?? ''}`;
     setTimeout(() => {
       const cur = this.sessions.get(sessionId);
-      if (cur && cur.status === SessionStatus.ENDED) {
+      if (cur?.endedAt) {
         this.sessions.delete(sessionId);
         this.onChange?.();
       }
@@ -95,6 +101,11 @@ export class Store {
     p.resolve(result);
     this.onChange?.();
     return p;
+  }
+
+  hasPending(sessionId) {
+    for (const p of this.pending.values()) if (p.sessionId === sessionId) return true;
+    return false;
   }
 
   /** 매크로패드 1~3번용: 가장 오래 기다린 허가 요청 */

@@ -103,7 +103,7 @@ function SessionRow({ s }) {
       <div className="info">
         <div className="name">{projName(s)}</div>
         {s.lastMessage ? <div className="last">{s.lastMessage}</div> : null}
-        {(s.model || s.thinking !== null) ? (
+        {(s.model || s.thinking !== null || s.hasTmux) ? (
           <div className="meta">
             {s.model ? <span>{s.model}</span> : null}
             {s.thinking !== null ? <span>생각 {s.thinking ? 'ON' : 'OFF'}(추정)</span> : null}
