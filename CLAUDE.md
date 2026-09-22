@@ -39,8 +39,10 @@
 5. **"항상 예" 구현** — 데몬이 프로젝트 `.claude/settings.local.json`의
    `permissions.allow`에 규칙 추가 후 allow (규칙 생성은 `src/permissions.js`).
    복합 명령(`|`, `&&`, `;`, 리다이렉트, 서브셸), 래퍼 명령(sudo/env/timeout/bash -c…), 임의
-   패키지 실행기(npx/pipx/uvx/bunx), 러너 2토큰(uv run/docker exec/…)은 규칙을 만들지 않고,
-   규칙 기록에 실패해도 `once`로 강등한다 — "다시 묻지 않기"가 조용히
+   패키지 실행기(npx/pipx/uvx/bunx), 러너 2토큰(uv run/docker exec/…), 러너를 가진 명령의 단독
+   호출·옵션 선행(`docker`, `kubectl -n x …` — 1토큰 규칙이 러너를 통째로 연다), 경로 붙은
+   명령(`/usr/bin/env`), command 없는 Bash는 규칙을 만들지 않고, 규칙 기록에 실패해도 `once`로
+   강등한다(폰에 안내 띠) — "다시 묻지 않기"가 조용히
    과도하게 넓어지거나 조용히 무시되는 두 경우를 모두 막기 위해.
 6. **다이얼 기능은 tmux 전제** — 데몬이 `tmux send-keys`로 주입. `shell/cl.sh`의 `cl`
    함수가 tmux를 자동으로 씌운다. tmux 없이도 허가 응답·상태 표시는 전부 동작.

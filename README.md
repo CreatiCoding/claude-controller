@@ -105,9 +105,12 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
    - **예** → hook이 `{"decision":{"behavior":"allow"}}` 출력
    - **항상 예** → 데몬이 해당 프로젝트 `.claude/settings.local.json`의 `permissions.allow`에
      규칙 추가(예: `Bash(git push *)`, `WebFetch(domain:github.com)`) 후 allow.
-     파이프·`&&`·리다이렉트가 섞인 복합 명령, `sudo`/`env`/`timeout` 같은 래퍼 명령, 그리고
-     `npx …`/`uv run …`/`docker exec …`처럼 뒤에 오는 프로그램을 통째로 여는 러너는 프리픽스만으로
+     파이프·`&&`·리다이렉트가 섞인 복합 명령, `sudo`/`env`/`timeout` 같은 래퍼 명령,
+     `npx …`/`uv run …`/`docker exec …`처럼 뒤에 오는 프로그램을 통째로 여는 러너, 러너를 가진 명령의
+     단독 호출·옵션 선행(`docker`, `kubectl -n x …`), 경로가 붙은 명령(`/usr/bin/env …`)은 프리픽스만으로
      의도를 대표할 수 없어 규칙을 만들지 않고 **1회 승인으로 강등**된다(규칙 기록에 실패한 경우도 같다).
+     이때 폰 상단에 안내 띠가 뜬다. `git -C x status`·`make -j4 test`처럼 러너가 없는 명령은
+     `Bash(git *)` 한 토큰 규칙으로 허용된다.
    - **아니오** → `{"behavior":"deny"}`
 4. **타임아웃(기본 300초) 또는 데몬 미실행 시** hook은 아무 출력 없이 종료
    → 터미널의 기본 허가 프롬프트로 자연스럽게 넘어간다. 즉 이 시스템이 죽어도 Claude Code는 평소대로 동작.
