@@ -161,6 +161,10 @@ test('CSRF: text/plain simple request와 다른 Origin은 거부, 같은 Origin�
   assert.equal((await raw({ 'Content-Type': 'text/plain' })).status, 415);
   assert.equal((await raw({ 'Content-Type': 'application/json', Origin: 'http://evil.example' })).status, 403);
   assert.equal((await raw({ 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT}` })).status, 409, '같은 Origin은 통과(대기 없음이라 409)');
+  assert.equal((await raw({ 'Content-Type': 'application/json', Origin: 'null' })).status, 403, 'Origin: null도 거부');
+  // DNS 리바인딩: Host와 Origin이 서로 같아도 데몬이 열어 둔 주소가 아니면 거부
+  assert.equal((await raw({ 'Content-Type': 'application/json', Host: `evil.example:${PORT}`, Origin: `http://evil.example:${PORT}` })).status, 403);
+  assert.equal((await raw({ 'Content-Type': 'application/json', Host: `localhost:${PORT}` })).status, 409, 'localhost도 허용');
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{broken')).status, 400);
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"x":"' + 'a'.repeat(1_100_000) + '"}')).status, 413);
 });

@@ -56,6 +56,33 @@ test('종료 후 늦은 이벤트는 상태를 되살리지 않고 TTL에 제거
   assert.equal(store.sessions.get('B').status, SessionStatus.WORKING);
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(store.sessions.has('B'), true, 'resume된 세션은 삭제되지 않음');
+  // 늦은 이벤트는 updatedAt/lastMessage도 건드리지 않는다
+  store.upsertSession('C');
+  store.endSession('C', 'exit');
+  const before = { ...store.sessions.get('C') };
+  await new Promise((r) => setTimeout(r, 5));
+  store.upsertSession('C', { lastEvent: 'notify:x', lastMessage: '늦음' });
+  assert.equal(store.sessions.get('C').updatedAt, before.updatedAt);
+  assert.equal(store.sessions.get('C').lastMessage, null);
+  // 종료된 세션에 붙은 허가 요청을 해소해도 working으로 되살아나지 않는다
+  const done = perm(store, 'C');
+  store.resolvePending(store.oldestPending().id, { decision: 'passthrough' });
+  await done;
+  assert.equal(store.sessions.get('C').status, SessionStatus.ENDED);
+});
+
+test('resume 후 재종료하면 TTL이 재종료 시점부터 다시 센다', async () => {
+  const store = new Store({ endedTtlMs: 60 });
+  store.upsertSession('A');
+  store.endSession('A', 'exit');           // t=0, 첫 타이머 t=60
+  await new Promise((r) => setTimeout(r, 20));
+  store.upsertSession('A', { lastEvent: 'start:resume' });
+  await new Promise((r) => setTimeout(r, 20));
+  store.endSession('A', 'exit');           // t=40, 두 번째 타이머 t=100
+  await new Promise((r) => setTimeout(r, 40)); // t=80: 첫 타이머가 살아 있었다면 이미 삭제됐을 시점
+  assert.equal(store.sessions.has('A'), true);
+  await new Promise((r) => setTimeout(r, 40)); // t=120
+  assert.equal(store.sessions.has('A'), false);
 });
 
 test('스냅샷: 최근 활동 순 세션, 세션별 pending은 오래된 순, null 필드는 patch로 덮이지 않음', () => {

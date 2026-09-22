@@ -53,5 +53,14 @@ test('addAllowRule: settings.local.json에 병합 저장, 중복 없음, cwd 없
   fs.writeFileSync(file, '{broken');
   assert.equal(addAllowRule(cwd, 'Bash(ls *)'), false);
   assert.equal(fs.readFileSync(file, 'utf8'), '{broken');
+  // 쓰기 실패(읽기 전용 디렉터리)도 예외 대신 false
+  const ro = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-ro-'));
+  fs.chmodSync(ro, 0o555);
+  assert.equal(addAllowRule(ro, 'Bash(ls *)'), false);
+  fs.chmodSync(ro, 0o755);
+  fs.rmSync(ro, { recursive: true });
+  // cwd가 사라졌으면 되살리지 않는다
   fs.rmSync(cwd, { recursive: true });
+  assert.equal(addAllowRule(cwd, 'Bash(ls *)'), false);
+  assert.equal(fs.existsSync(cwd), false);
 });
