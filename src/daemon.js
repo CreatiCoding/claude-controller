@@ -70,9 +70,21 @@ function readJson(req) {
 // Host/Origin은 "요청의 Host와 같은가"가 아니라 "데몬이 실제로 열어 둔 주소인가"로 본다.
 // Host 헤더끼리 비교하면 DNS 리바인딩(evil.example → 127.0.0.1)으로 같은 값이 만들어져 뚫린다.
 function allowedHosts() {
-  const hosts = new Set([`127.0.0.1:${config.port}`, `localhost:${config.port}`, `[::1]:${config.port}`]);
-  for (const addr of servers.keys()) hosts.add(`${addr}:${config.port}`);
-  if (config.host !== 'auto') hosts.add(`${config.host}:${config.port}`);
+  // 루프백 별칭 3개 + 현재 listen 중인 주소 + 고정 host. 0.0.0.0이면 접속 주소가 어느 인터페이스든
+  // 될 수 있으므로 이 머신의 IPv4 전부를 넣는다(그 모드는 어차피 "누구나 접근 가능" 경고 대상).
+  const names = ['127.0.0.1', 'localhost', '[::1]', ...servers.keys()];
+  if (config.host === '0.0.0.0') {
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const i of ifaces ?? []) if (i.family === 'IPv4') names.push(i.address);
+    }
+  } else if (config.host !== 'auto') {
+    names.push(config.host);
+  }
+  const hosts = new Set();
+  for (const n of names) {
+    hosts.add(`${n}:${config.port}`);
+    if (config.port === 80 || config.port === 443) hosts.add(n); // 브라우저는 기본 포트를 생략한다
+  }
   return hosts;
 }
 
@@ -83,12 +95,19 @@ function rejectCrossSite(req) {
   }
   const hosts = allowedHosts();
   const host = String(req.headers.host ?? '').toLowerCase();
-  if (!hosts.has(host)) throw new HttpError(403, `허용되지 않은 Host: ${host || '(없음)'}`);
   const origin = req.headers.origin;
-  if (origin) {
-    let oh;
-    try { oh = new URL(origin).host.toLowerCase(); } catch { throw new HttpError(403, `Origin 형식 오류: ${origin}`); } // 'null' 포함
-    if (!hosts.has(oh)) throw new HttpError(403, `허용되지 않은 Origin: ${origin}`);
+  let reason = null;
+  if (!hosts.has(host)) reason = `허용되지 않은 Host: ${host || '(없음)'}`;
+  else if (origin) {
+    let oh = null;
+    try { oh = new URL(origin).host.toLowerCase(); } catch { /* 'null' 등 파싱 불가 */ }
+    if (oh === null) reason = `Origin 형식 오류: ${origin}`;
+    else if (!hosts.has(oh)) reason = `허용되지 않은 Origin: ${origin}`;
+  }
+  if (reason) {
+    // 폰 대시보드는 실패를 표시하지 않으므로, "버튼이 안 먹는" 원인을 로그로는 반드시 남긴다
+    console.warn(`[http] 403 ${req.url} — ${reason} (다른 호스트명으로 열었다면 127.0.0.1/테더링 주소로 접속하세요)`);
+    throw new HttpError(403, reason);
   }
 }
 
@@ -115,6 +134,7 @@ async function handleHookEvent(req, res) {
       return json(res, 200, {});
 
     case 'SessionEnd':
+      if (store.sessions.get(sid)?.endedAt) return json(res, 200, {}); // 중복 SessionEnd는 TTL을 다시 찍지 않는다
       store.upsertSession(sid, base);
       store.endSession(sid, payload.reason);
       return json(res, 200, {});

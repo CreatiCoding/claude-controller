@@ -91,7 +91,9 @@ export class Store {
       resolve,
     };
     this.pending.set(p.id, p);
-    this.upsertSession(sessionId, { status: SessionStatus.WAITING });
+    // 종료로 표시된 세션에 허가 요청이 왔다 = 실제로는 살아 있다(resume인데 SessionStart hook이
+    // 유실된 경우 등). 종료를 해제해야 카드가 대기 상태로 보이고 TTL 삭제로 고아 pending이 안 생긴다.
+    this.upsertSession(sessionId, { status: SessionStatus.WAITING, lastEvent: 'start:permission' });
     return p;
   }
 
