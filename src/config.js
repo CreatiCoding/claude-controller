@@ -16,6 +16,12 @@ const defaults = {
   // 192.168.42. = 안드로이드 USB 테더링 기본 대역.
   autoBindSubnets: ['172.20.10.', '192.168.42.'],
 
+  // 자동 바인딩에서 제외할 인터페이스 이름. 기본 'wifi'는 macOS의 Wi-Fi 포트를
+  // networksetup으로 찾아 제외한다 — 아이폰 핫스팟에 Wi-Fi로 붙으면 USB 테더링과
+  // 같은 172.20.10.x 대역이라, 이 제외가 없으면 핫스팟에 합류한 다른 기기도
+  // 인증 없는 승인 API에 닿을 수 있다. ['wifi', 'en7']처럼 이름을 더할 수 있다.
+  excludeInterfaces: ['wifi'],
+
   // 허가 요청(PermissionRequest hook)이 폰/매크로패드 응답을 기다리는 시간(초).
   // 초과하면 'passthrough' — hook이 아무 결정도 내리지 않고 터미널의 기본 허가
   // 프롬프트로 넘어간다. 넉넉히 잡되, 터미널 앞에 있을 때를 위해 무한은 피한다.
@@ -56,5 +62,9 @@ if (fs.existsSync(userConfigPath)) {
     console.error(`[config] config.json 파싱 실패, 기본값 사용: ${err.message}`);
   }
 }
+
+// 환경변수 덮어쓰기 (테스트·임시 실행용). hook-handler도 같은 이름을 본다.
+if (process.env.CLAUDE_CONTROLLER_PORT) config.port = Number(process.env.CLAUDE_CONTROLLER_PORT);
+if (process.env.CLAUDE_CONTROLLER_HOST) config.host = process.env.CLAUDE_CONTROLLER_HOST;
 
 export default config;
