@@ -10,6 +10,10 @@ import { Store, SessionStatus } from './state.js';
 import { ruleForRequest, addAllowRule } from './permissions.js';
 import { sendKeys, typeLine } from './tmux.js';
 import { startAdbReverse } from './adb.js';
+import { installConsoleLogger, logPath } from './log.js';
+
+installConsoleLogger('daemon');
+console.log(`[daemon] 시작 pid=${process.pid} node=${process.version} — 로그: ${logPath('daemon')} (hook 쪽: ${logPath('hook')})`);
 
 const store = new Store({ endedTtlMs: config.endedSessionTtlSeconds * 1000 });
 
@@ -151,6 +155,8 @@ async function handleHookEvent(req, res) {
   }
 
   const base = { cwd: payload.cwd, tmuxPane };
+  // 모든 이벤트를 한 줄씩 남긴다 — "폰에 안 뜸"을 볼 때 hook이 데몬까지 왔는지가 첫 분기점
+  console.log(`[hook] ${event} sid=${sid.slice(0, 8)} cwd=${payload.cwd ?? '-'} pane=${tmuxPane ?? '-'}${payload.tool_name ? ` tool=${payload.tool_name}` : ''}${payload.notification_type ? ` type=${payload.notification_type}` : ''}`);
 
   switch (event) {
     case 'SessionStart':
@@ -189,10 +195,10 @@ async function handleHookEvent(req, res) {
         const pending = store.addPending({ sessionId: sid, payload, resolve, ...base });
         pendingId = pending.id;
         console.log(`[perm] 대기: ${pending.toolName} ${summarizeInput(pending.toolInput)} (${sid.slice(0, 8)})`);
-        timer = setTimeout(
-          () => store.resolvePending(pending.id, { decision: 'passthrough', reason: 'timeout' }),
-          config.permissionWaitSeconds * 1000,
-        );
+        timer = setTimeout(() => {
+          console.log(`[perm] 타임아웃(${config.permissionWaitSeconds}s) — 터미널 프롬프트로 넘김 req=${pending.id.slice(0, 8)}`);
+          store.resolvePending(pending.id, { decision: 'passthrough', reason: 'timeout' });
+        }, config.permissionWaitSeconds * 1000);
       });
       // hook 프로세스가 먼저 죽으면(세션 강제 종료 등) 유령 요청을 즉시 정리
       res.on('close', () => {
@@ -240,6 +246,7 @@ function respond(requestId, decisionName) {
       result.decision = 'once';
     }
   }
+  console.log(`[perm] 응답 ${decisionName}${result.decision !== decisionName ? `→${result.decision}` : ''} req=${requestId.slice(0, 8)} ${p.toolName} 대기 ${((Date.now() - p.createdAt) / 1000).toFixed(1)}s`);
   store.resolvePending(requestId, result);
   return { ok: true, decision: result.decision, rule: result.rule ?? null };
 }
@@ -353,7 +360,10 @@ const upgradeHandler = (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 };
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const from = `${req.socket.remoteAddress} ua=${String(req.headers['user-agent'] ?? '').slice(0, 40)}`;
+  console.log(`[ws] 접속 ${from} (클라이언트 ${wss.clients.size})`);
+  ws.on('close', () => console.log(`[ws] 해제 ${req.socket.remoteAddress} (클라이언트 ${wss.clients.size})`));
   ws.send(JSON.stringify({ type: 'state', ...store.snapshot() }));
 });
 
