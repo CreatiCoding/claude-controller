@@ -64,11 +64,15 @@ test('종료 후 늦은 이벤트는 상태를 되살리지 않고 TTL에 제거
   store.upsertSession('C', { lastEvent: 'notify:x', lastMessage: '늦음' });
   assert.equal(store.sessions.get('C').updatedAt, before.updatedAt);
   assert.equal(store.sessions.get('C').lastMessage, null);
-  // 종료된 세션에 붙은 허가 요청을 해소해도 working으로 되살아나지 않는다
+  // 종료된 세션에 허가 요청이 오면 실제로는 살아 있는 것 — 종료를 해제하고(고아 pending 방지) 정상 흐름
   const done = perm(store, 'C');
+  assert.equal(store.sessions.get('C').status, SessionStatus.WAITING);
+  assert.equal(store.sessions.get('C').endedAt, undefined);
   store.resolvePending(store.oldestPending().id, { decision: 'passthrough' });
   await done;
-  assert.equal(store.sessions.get('C').status, SessionStatus.ENDED);
+  assert.equal(store.sessions.get('C').status, SessionStatus.WORKING);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(store.sessions.has('C'), true, '되살아난 세션은 TTL 삭제되지 않음');
 });
 
 test('resume 후 재종료하면 TTL이 재종료 시점부터 다시 센다', async () => {

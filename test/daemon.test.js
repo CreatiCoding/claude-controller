@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import http from 'node:http';
 import WebSocket from 'ws';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -162,9 +163,19 @@ test('CSRF: text/plain simple request와 다른 Origin은 거부, 같은 Origin�
   assert.equal((await raw({ 'Content-Type': 'application/json', Origin: 'http://evil.example' })).status, 403);
   assert.equal((await raw({ 'Content-Type': 'application/json', Origin: `http://127.0.0.1:${PORT}` })).status, 409, '같은 Origin은 통과(대기 없음이라 409)');
   assert.equal((await raw({ 'Content-Type': 'application/json', Origin: 'null' })).status, 403, 'Origin: null도 거부');
-  // DNS 리바인딩: Host와 Origin이 서로 같아도 데몬이 열어 둔 주소가 아니면 거부
-  assert.equal((await raw({ 'Content-Type': 'application/json', Host: `evil.example:${PORT}`, Origin: `http://evil.example:${PORT}` })).status, 403);
-  assert.equal((await raw({ 'Content-Type': 'application/json', Host: `localhost:${PORT}` })).status, 409, 'localhost도 허용');
+  // DNS 리바인딩: Host와 Origin이 서로 같아도 데몬이 열어 둔 주소가 아니면 거부.
+  // fetch()는 사용자 지정 Host를 버리므로 node:http + setHost:false로 실제 Host 헤더를 보낸다.
+  const rawHost = (host, extra = {}) => new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: PORT, path: '/api/key', method: 'POST', setHost: false,
+      headers: { 'Content-Type': 'application/json', Host: host, ...extra } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on('error', reject);
+    req.end('{"key":1}');
+  });
+  assert.equal(await rawHost(`evil.example:${PORT}`, { Origin: `http://evil.example:${PORT}` }), 403, 'Host==Origin이어도 허용 목록 밖이면 거부');
+  assert.equal(await rawHost(`evil.example:${PORT}`), 403, 'Origin 없이 Host만 위조해도 거부');
+  assert.equal(await rawHost(`LOCALHOST:${PORT}`), 409, 'localhost(대소문자 무관)는 허용');
+  assert.equal(await rawHost(`[::1]:${PORT}`), 409, '[::1]도 허용');
+  assert.equal(await rawHost('127.0.0.1'), 403, '포트 생략은 80/443이 아니면 거부');
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{broken')).status, 400);
   assert.equal((await raw({ 'Content-Type': 'application/json' }, '{"x":"' + 'a'.repeat(1_100_000) + '"}')).status, 413);
 });
@@ -183,6 +194,20 @@ test('Stop → idle, SessionEnd → ended, 미인식 이벤트는 로그, 세션
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'ended');
   // 같은 id로 SessionStart(resume)가 오면 다시 살아난다
   await hook({ hook_event_name: 'SessionStart', session_id: 'S1', cwd, source: 'resume' });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'working');
+});
+
+test('종료 세션에 허가 요청이 오면 되살아나고(고아 pending 방지), 중복 SessionEnd는 updatedAt을 다시 찍지 않는다', async () => {
+  await hook({ hook_event_name: 'SessionEnd', session_id: 'S1', cwd, reason: 'exit' });
+  const first = (await state()).sessions.find((x) => x.id === 'S1');
+  await new Promise((r) => setTimeout(r, 5));
+  await hook({ hook_event_name: 'SessionEnd', session_id: 'S1', cwd, reason: 'exit' });
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').updatedAt, first.updatedAt);
+  const done = permission('Bash', { command: 'pwd' });
+  const p = await waitPending();
+  assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'waiting');
+  await post('/api/respond', { id: p.id, decision: 'once' });
+  await done;
   assert.equal((await state()).sessions.find((x) => x.id === 'S1').status, 'working');
 });
 
