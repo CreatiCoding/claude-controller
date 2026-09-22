@@ -52,7 +52,7 @@
 - `src/permissions.js` — "항상 예" allow 규칙 생성·기록
 - `src/tmux.js` / `src/adb.js` — tmux 주입, adb reverse 재시도
 - `bin/hook-handler.js` — Claude Code hook이 실행하는 스크립트 (stdin JSON → 데몬)
-- `scripts/install-hooks.js` — `~/.claude/settings.json`에 hook 등록/제거
+- `scripts/install-hooks.js` — `~/.claude/settings.json`에 hook 등록(재실행 시 갱신, 백업 생성)
 - `web/` — React + Vite 대시보드 (yarn dev / yarn build)
 - `karabiner/claude-controller.json` — F19~F24 → `/api/key` 매핑 (매크로패드용)
 - `hammerspoon/init.lua` — Karabiner를 못 쓰는 환경용 대체재
@@ -67,5 +67,11 @@
   `excludeInterfaces`로 제외한다(아이폰 핫스팟 Wi-Fi 합류 시 같은 대역이 뜬다).
 - `yarn test`가 데몬을 임의 포트로 띄워 hook 왕복까지 검증한다. 동작을 바꾸면 테스트도 같이.
 - `endSession`은 남은 허가 요청을 먼저 정리한 뒤 ENDED를 찍는다(`resolvePending`이 상태를
-  working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다.
+  working으로 되돌리기 때문). 순서를 바꾸면 종료된 세션이 "작업 중"으로 남는다. 종료 뒤
+  늦게 온 Stop/Notification은 `endedAt`이 있는 동안 status를 바꾸지 못하고, `start:` 이벤트만
+  종료를 해제한다(카드 영구 잔존 방지).
+- "항상 예" 강등(규칙 없음/기록 실패 → once)은 `respond()` 안에서, 즉 폰에 응답을 돌려주기 전에
+  결정한다. hook 응답 쪽에서 나중에 바꾸면 폰은 always, hook은 once를 보는 불일치가 생긴다.
+- POST는 `rejectCrossSite`가 먼저 본다(application/json 강제 + Origin 검사). 새 POST 라우트를
+  추가해도 이 검사 뒤에 둘 것.
 - hook 스키마는 Claude Code 버전에 따라 바뀔 수 있다 — 이벤트 추가 시 공식 문서 확인.

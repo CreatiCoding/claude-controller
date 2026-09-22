@@ -100,7 +100,7 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
 
 1. Claude Code가 허가가 필요한 도구를 실행하려 하면 **`PermissionRequest` hook**이 발동
    → `bin/hook-handler.js`가 stdin JSON을 데몬에 전달하고 응답을 기다린다.
-2. 데몬이 WebSocket으로 폰에 요청 전문(도구명 + 명령)을 송출, 화면 테두리 점멸 + 진동.
+2. 데몬이 WebSocket으로 폰에 요청 전문(도구명 + 명령)을 송출, 화면 배경 점멸 + 진동.
 3. 버튼/터치 응답:
    - **예** → hook이 `{"decision":{"behavior":"allow"}}` 출력
    - **항상 예** → 데몬이 해당 프로젝트 `.claude/settings.local.json`의 `permissions.allow`에
@@ -113,7 +113,8 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
 
 ### 상태 표시
 
-- `SessionStart`/`SessionEnd` → 세션 카드 생성/제거
+- `SessionStart`/`SessionEnd` → 세션 카드 생성 / 종료 표시(5분 뒤 제거)
+- `Notification(permission_prompt)` → 폰 카드가 떠 있지 않을 때(passthrough·타임아웃 뒤)만 "입력 대기"로 표시
 - `Stop` → "완료" 표시 (cc-streamdeck 패턴)
 - `Notification`(idle_prompt 등) → "입력 대기" 표시 + 마지막 메시지를 목록에 1줄 표시
 - hook 실행 환경의 `$TMUX_PANE`을 함께 보내 세션↔tmux pane 매핑
@@ -162,9 +163,14 @@ node scripts/uninstall-hooks.js   # ~/.claude/settings.json에서 이 리포의 
 | `GET /ws`           | WebSocket — `{type:"state", sessions:[...]}` 브로드캐스트               |
 
 데몬은 `127.0.0.1`과 폰 USB 테더링 인터페이스에만 바인딩된다. 테더링 감지는 IP 대역
-기준이므로 맥의 Wi-Fi 인터페이스는 기본 제외한다(위 `excludeInterfaces`). `/api/respond`는
-실패해도 200 + `{ok:false, error}`, `/api/key`는 실패 시 409, `/api/state`는 `{sessions, now}`
-(WS 메시지에만 `type:"state"`가 붙는다). 요청 본문은 1MB까지.
+기준이므로 맥의 Wi-Fi 인터페이스는 기본 제외한다(위 `excludeInterfaces`). `/api/respond`와
+`/api/action`은 실패해도 200 + `{ok:false, error}`, `/api/key`는 실패 시 409, `/api/state`는
+`{sessions, now}`(WS 메시지에만 `type:"state"`가 붙는다).
+
+POST는 `Content-Type: application/json`만 받고(아니면 415), `Origin` 헤더가 있으면 데몬 자신의
+host와 같아야 한다(아니면 403). 인증이 없는 승인 API를 브라우저에 열린 다른 사이트가
+cross-site로 호출하지 못하게 하는 장치다. curl·hook·Karabiner·Hammerspoon은 Origin을 안 보내므로
+영향 없다. 본문이 JSON이 아니면 400, 1MB를 넘으면 413.
 
 ## 문제 해결
 
