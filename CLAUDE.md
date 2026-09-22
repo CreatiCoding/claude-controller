@@ -61,6 +61,8 @@
 - `src/hooks-install.js` — hook 등록/제거 로직. npx/dlx 같은 임시 경로면 handler·cl.sh를
   `~/.claude-controller/`에 복사해 그 경로를 등록(캐시가 지워져도 hook이 살아 있게)
 - `scripts/install-hooks.js` — 위 로직의 얇은 래퍼(리포 사용자용)
+- `scripts/install-cli.sh` — publish 없이 로컬 바이너리 설치(클론→빌드→`~/.local/bin` 래퍼). `curl | bash` 대응,
+  클론 안에서 실행하면 그 클론 사용, 재실행은 pull+재빌드, `--uninstall`
 - `web/` — React + Vite 대시보드 (yarn dev / yarn build)
 - `karabiner/claude-controller.json` — F19~F24 → `/api/key` 매핑 (매크로패드용)
 - `hammerspoon/init.lua` — Karabiner를 못 쓰는 환경용 대체재

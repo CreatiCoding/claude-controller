@@ -20,17 +20,26 @@
 
 > 물리 버튼(매크로패드)으로도 조작하고 싶다면 → [ADVANCED_MACROPAD.md](ADVANCED_MACROPAD.md)
 
-## 빠른 시작 (npx, 클론 없이)
+## 빠른 시작 (한 줄 설치, publish 불필요)
 
 ```bash
-npx @creaticoding/claude-controller install-hooks   # hook 등록 (handler는 ~/.claude-controller/에 복사)
-npx @creaticoding/claude-controller start           # 데몬 실행
-npx @creaticoding/claude-controller doctor          # 새 환경에서 잘 될지 진단
+curl -fsSL https://raw.githubusercontent.com/CreatiCoding/claude-controller/main/scripts/install-cli.sh | bash
 ```
 
-`yarn dlx @creaticoding/claude-controller <명령>`도 같다. 명령: `doctor` / `start` / `install-hooks` /
-`uninstall-hooks` / `shell-init`(cl 함수 출력, `eval "$(npx @creaticoding/claude-controller shell-init)"`).
-설정은 `~/.claude-controller/config.json`(리포로 쓸 때는 리포 루트 `config.json`이 우선).
+리포를 `~/.claude-controller/repo`에 클론하고, 의존성 설치·대시보드 빌드 후 `~/.local/bin/claude-controller`
+래퍼를 만든다(yarn이 없어도 됨). 이미 클론한 폴더 안에서 `./scripts/install-cli.sh`를 실행하면 그 클론을 그대로 쓴다.
+다시 실행하면 `git pull` + 재빌드, `--uninstall`이면 래퍼와 클론 제거. 위치는 `CC_REPO_DIR`·`CC_BIN_DIR`로 바꿀 수 있다.
+
+```bash
+claude-controller install-hooks   # hook 등록
+claude-controller start           # 데몬 실행
+claude-controller doctor          # 새 환경에서 잘 될지 진단
+```
+
+명령: `doctor` / `start` / `install-hooks` / `uninstall-hooks` / `shell-init`(cl 함수 출력) / `help`.
+설정은 리포 루트 `config.json` 또는 `~/.claude-controller/config.json`. npm에 발행돼 있다면
+`npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로도 같은 명령을 쓸 수 있다(이때 handler는
+`~/.claude-controller/`에 복사돼 등록된다).
 
 ### doctor — 환경 진단
 
@@ -177,11 +186,12 @@ Node 20.19 이상. yarn이 없으면 `npx --yes corepack@latest yarn <명령>`�
 ## 제거
 
 ```bash
-node scripts/uninstall-hooks.js                        # 리포에서
-npx @creaticoding/claude-controller uninstall-hooks    # npx로 설치했다면
+claude-controller uninstall-hooks                       # hook 제거 (먼저)
+~/.claude-controller/repo/scripts/install-cli.sh --uninstall   # 래퍼·클론 제거 (한 줄 설치로 깔았다면)
+node scripts/uninstall-hooks.js                         # 리포에서 직접 쓸 때
 ```
 
-`~/.claude/settings.json`에서 이 도구의 hook만 제거한다. `~/.claude-controller/`(복사된 handler·cl.sh·config)는 직접 지운다.
+`uninstall-hooks`는 `~/.claude/settings.json`에서 이 도구의 hook만 제거한다. `~/.claude-controller/config.json`은 직접 지운다.
 
 설치 시 만든 백업은 `~/.claude/settings.json.claude-controller.bak`(재설치마다 덮어씀).
 
