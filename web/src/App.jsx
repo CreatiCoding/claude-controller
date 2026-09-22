@@ -18,12 +18,23 @@ function detail(p) {
     ?? (Object.keys(i).length ? JSON.stringify(i, null, 1) : '');
 }
 
-const respond = (id, decision) =>
-  fetch('/api/respond', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, decision }),
-  }).catch(() => {});
+// 실패(403/500/네트워크)를 삼키지 않고 상단에 잠깐 띄운다 — 안 그러면 "버튼이 안 먹는다"로만 보인다
+let showError = () => {};
+const respond = async (id, decision) => {
+  try {
+    const res = await fetch('/api/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, decision }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      showError(`응답 실패 ${res.status}: ${body.error ?? ''}`);
+    }
+  } catch (e) {
+    showError(`응답 실패: ${e.message}`);
+  }
+};
 
 /** WebSocket 자동 재접속 + 상태 구독 */
 function useDaemonState() {
@@ -120,6 +131,12 @@ export default function App() {
   const { state, connected } = useDaemonState();
   useWakeLock();
 
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    showError = (msg) => { setError(msg); setTimeout(() => setError(null), 5000); };
+    return () => { showError = () => {}; };
+  }, []);
+
   const sessions = state.sessions ?? [];
   const pending = sessions.flatMap((s) => s.pending.map((p) => ({ ...p, session: s })));
 
@@ -139,6 +156,7 @@ export default function App() {
         <div id="conn" className={connected ? 'on' : ''} />
       </header>
       <main>
+        {error ? <div className="error">{error}</div> : null}
         {!sessions.length ? (
           <div className="empty">활성 세션이 없습니다.<br />맥에서 claude를 실행하세요 (다이얼 기능만 tmux 필요 — <code>cl</code>).</div>
         ) : (
