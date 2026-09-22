@@ -22,8 +22,10 @@ export function ruleForRequest({ toolName, toolInput, permissionType }) {
     // 파이프·체인·리다이렉트·서브셸이 섞인 복합 명령은 첫 토큰만으로 의도를 대표할 수 없다
     // (예: `cd x && git push` → `Bash(cd *)`가 되면 cd로 시작하는 모든 명령이 열린다). 1회 승인으로 강등.
     if (/[|&;<>`$()\n]/.test(command)) return null;
-    const words = command.split(/\s+/)
-      .filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w)); // 앞쪽 env 대입 제거
+    const words = command.split(/\s+/);
+    // 선행 env 대입(FOO=1 BAR=2 cmd)만 벗긴다. 중간의 KEY=val(make VERBOSE=1 test)은 인자이므로
+    // 남겨야 한다 — 빼면 만들어진 규칙이 원래 명령에 프리픽스 매치되지 않아 "다시 묻지 않기"가 무효가 된다.
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
     if (words.length === 0) return null;
     // 래퍼 명령(sudo/env/time 등)은 뒤에 오는 실제 명령이 무엇이든 열리므로 규칙을 만들지 않는다
     if (WRAPPER_CMDS.has(words[0])) return null;

@@ -14,7 +14,7 @@ export default defineConfig({
     // 데몬의 CSRF 검사(Host·Origin이 데몬 자신의 주소여야 함)를 통과하도록 Host를 바꾸고 Origin을 맞춘다
     proxy: {
       '/api': { target: 'http://127.0.0.1:9200', changeOrigin: true, headers: { origin: 'http://127.0.0.1:9200' } },
-      '/ws': { target: 'ws://127.0.0.1:9200', ws: true, changeOrigin: true },
+      '/ws': { target: 'ws://127.0.0.1:9200', ws: true, changeOrigin: true, headers: { origin: 'http://127.0.0.1:9200' } },
     },
   },
 });

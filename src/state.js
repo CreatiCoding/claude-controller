@@ -9,6 +9,18 @@ export const SessionStatus = {
   ENDED: 'ended', // 세션 종료
 };
 
+// 폰에 보내는 스냅샷은 표시용이다. hook 페이로드는 Write content 등으로 수 MB가 될 수 있으므로
+// 문자열 필드를 잘라 매 브로드캐스트가 무거워지지 않게 한다(규칙 생성은 원본 toolInput을 쓴다).
+export const DISPLAY_LIMIT = 4000;
+function trimForDisplay(input) {
+  if (!input || typeof input !== 'object') return input;
+  const out = {};
+  for (const [k, v] of Object.entries(input)) {
+    out[k] = typeof v === 'string' && v.length > DISPLAY_LIMIT ? `${v.slice(0, DISPLAY_LIMIT)}… (+${v.length - DISPLAY_LIMIT}자)` : v;
+  }
+  return out;
+}
+
 export class Store {
   constructor({ endedTtlMs = 300_000 } = {}) {
     this.sessions = new Map(); // session_id -> session
@@ -141,7 +153,7 @@ export class Store {
       (pendingBySession[p.sessionId] ??= []).push({
         id: p.id,
         toolName: p.toolName,
-        toolInput: p.toolInput,
+        toolInput: trimForDisplay(p.toolInput),
         permissionType: p.permissionType,
         createdAt: p.createdAt,
       });
@@ -156,7 +168,7 @@ export class Store {
         thinking: s.thinking,
         hasTmux: Boolean(s.tmuxPane),
         lastEvent: s.lastEvent,
-        lastMessage: s.lastMessage,
+        lastMessage: typeof s.lastMessage === 'string' ? s.lastMessage.slice(0, DISPLAY_LIMIT) : s.lastMessage,
         startedAt: s.startedAt,
         updatedAt: s.updatedAt,
         pending: (pendingBySession[s.id] ?? []).sort((a, b) => a.createdAt - b.createdAt),

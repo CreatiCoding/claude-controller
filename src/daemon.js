@@ -50,6 +50,7 @@ function readJson(req, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     let body = '';
     let tooLarge = false;
+    req.setEncoding('utf8'); // 청크 경계에서 멀티바이트(한글·이모지)가 U+FFFD로 깨지지 않게
     req.on('data', (c) => {
       if (tooLarge) return; // 나머지는 읽어서 버린다 (소켓을 끊으면 413 응답이 못 나간다)
       body += c;
@@ -272,6 +273,7 @@ async function runDial(action, session) {
 
 // 매크로패드(Hammerspoon hyper+1~6) → 액션 매핑
 async function handleKey(key) {
+  if (!Number.isInteger(key)) return { ok: false, error: `키는 1~6 정수여야 함: ${key}` };
   if (key >= 1 && key <= 3) {
     const p = store.oldestPending();
     if (!p) return { ok: false, error: '대기 중인 허가 요청 없음' };
@@ -317,6 +319,8 @@ const requestHandler = async (req, res) => {
     json(res, 404, { error: 'not found' });
   } catch (err) {
     if (!(err instanceof HttpError)) console.error('[http]', err);
+    // hook 이벤트가 거부되면 hook-handler는 조용히 passthrough하므로("폰에 안 뜸") 데몬 로그에는 남긴다
+    else if (req.url === '/hook/event') console.warn(`[hook] ${err.status} ${err.message} — 이 허가 요청은 터미널 프롬프트로 넘어갑니다`);
     if (!res.headersSent) json(res, err.status ?? 500, { error: err.message });
   }
 };
@@ -328,9 +332,10 @@ const upgradeHandler = (req, socket, head) => {
   // WebSocket은 동일 출처 정책이 없어 임의 사이트가 스냅샷(cwd·대기 중 명령)을 읽을 수 있다 — POST와 같은 검사
   const reason = crossSiteReason(req);
   if (reason) {
-    console.warn(`[ws] 거부 — ${reason}`);
-    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
-    return socket.destroy();
+    console.warn(`[ws] 거부 — ${reason} (다른 호스트명으로 대시보드를 열면 세션이 안 보이고 재접속을 반복합니다)`);
+    socket.on('error', () => {});
+    socket.once('finish', () => socket.destroy());
+    return socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
   }
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 };
