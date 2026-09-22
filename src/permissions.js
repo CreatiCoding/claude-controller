@@ -10,7 +10,16 @@ const SUBCOMMAND_CMDS = new Set([
 ]);
 
 // 뒤에 임의의 명령이 붙는 래퍼 — 프리픽스 규칙을 만들면 사실상 전부 허용이 된다
-const WRAPPER_CMDS = new Set(['sudo', 'env', 'time', 'nohup', 'nice', 'xargs', 'exec', 'sh', 'bash', 'zsh', 'eval', 'source', '.']);
+const WRAPPER_CMDS = new Set([
+  'sudo', 'doas', 'su', 'env', 'time', 'timeout', 'nohup', 'nice', 'xargs', 'exec', 'command', 'builtin',
+  'sh', 'bash', 'zsh', 'eval', 'source', '.', 'watch', 'chroot',
+  'npx', // npx <패키지>는 임의 패키지 실행 — 프리픽스 규칙이면 전부 열린다
+]);
+// "<명령> <서브명령>" 2토큰 규칙이 뒤에 오는 프로그램을 통째로 여는 러너 — 규칙을 만들지 않는다
+const RUNNER_PAIRS = new Set([
+  'uv run', 'poetry run', 'pipx run', 'yarn exec', 'yarn dlx', 'npm exec', 'pnpm exec', 'pnpm dlx',
+  'go run', 'cargo run', 'docker run', 'docker exec', 'kubectl exec', 'kubectl run',
+]);
 
 /** 허가 요청 페이로드로부터 permissions.allow 규칙 문자열을 만든다. 못 만들면 null. */
 export function ruleForRequest({ toolName, toolInput, permissionType }) {
@@ -32,6 +41,7 @@ export function ruleForRequest({ toolName, toolInput, permissionType }) {
     let prefix = words[0];
     if (SUBCOMMAND_CMDS.has(words[0]) && words[1] && !words[1].startsWith('-')) {
       prefix = `${words[0]} ${words[1]}`;
+      if (RUNNER_PAIRS.has(prefix)) return null;
     }
     return `Bash(${prefix} *)`;
   }

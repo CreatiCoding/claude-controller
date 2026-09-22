@@ -12,12 +12,20 @@ export const SessionStatus = {
 // 폰에 보내는 스냅샷은 표시용이다. hook 페이로드는 Write content 등으로 수 MB가 될 수 있으므로
 // 문자열 필드를 잘라 매 브로드캐스트가 무거워지지 않게 한다(규칙 생성은 원본 toolInput을 쓴다).
 export const DISPLAY_LIMIT = 4000;
-function trimForDisplay(input) {
-  if (!input || typeof input !== 'object') return input;
+export function trimString(s) {
+  if (typeof s !== 'string' || s.length <= DISPLAY_LIMIT) return s;
+  let head = s.slice(0, DISPLAY_LIMIT);
+  // 서로게이트 쌍(이모지 등) 중간에서 자르면 끝 글자가 U+FFFD로 보인다
+  if (/[\uD800-\uDBFF]$/.test(head)) head = head.slice(0, -1);
+  return `${head}… (+${s.length - head.length}자)`;
+}
+// 중첩 객체/배열(MultiEdit의 edits[], MCP 도구 입력)까지 재귀로 자른다
+function trimForDisplay(input, depth = 0) {
+  if (typeof input === 'string') return trimString(input);
+  if (!input || typeof input !== 'object' || depth > 8) return input;
+  if (Array.isArray(input)) return input.slice(0, 200).map((v) => trimForDisplay(v, depth + 1));
   const out = {};
-  for (const [k, v] of Object.entries(input)) {
-    out[k] = typeof v === 'string' && v.length > DISPLAY_LIMIT ? `${v.slice(0, DISPLAY_LIMIT)}… (+${v.length - DISPLAY_LIMIT}자)` : v;
-  }
+  for (const [k, v] of Object.entries(input)) out[k] = trimForDisplay(v, depth + 1);
   return out;
 }
 
@@ -168,7 +176,7 @@ export class Store {
         thinking: s.thinking,
         hasTmux: Boolean(s.tmuxPane),
         lastEvent: s.lastEvent,
-        lastMessage: typeof s.lastMessage === 'string' ? s.lastMessage.slice(0, DISPLAY_LIMIT) : s.lastMessage,
+        lastMessage: trimString(s.lastMessage),
         startedAt: s.startedAt,
         updatedAt: s.updatedAt,
         pending: (pendingBySession[s.id] ?? []).sort((a, b) => a.createdAt - b.createdAt),
