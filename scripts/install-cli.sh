@@ -99,6 +99,6 @@ echo "다음 단계:"
 echo "  claude-controller install-hooks   # Claude Code hook 등록"
 echo "  claude-controller start           # 데몬 실행"
 echo "  claude-controller doctor          # 환경 진단"
-echo "  (~/.zshrc 에)  source $REPO_DIR/shell/cl.sh   # cl 명령 (tmux 다이얼용, 선택)"
+echo "  (~/.zshrc 에)  source $REPO_DIR/shell/ccode.sh   # ccode 명령 (tmux 다이얼용, 선택)"
 echo
 echo "갱신: 이 스크립트를 다시 실행하면 git pull + 재빌드.  제거: $0 --uninstall"

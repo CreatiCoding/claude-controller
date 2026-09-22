@@ -47,7 +47,7 @@ test('install-hooks --copy: handler를 ~/.claude-controller/에 복사하고 기
   assert.equal(r.status, 0, r.stderr);
   const copied = path.join(HOME, '.claude-controller', 'hook-handler.js');
   assert.ok(fs.existsSync(copied));
-  assert.ok(fs.existsSync(path.join(HOME, '.claude-controller', 'cl.sh')));
+  assert.ok(fs.existsSync(path.join(HOME, '.claude-controller', 'ccode.sh')));
   assert.ok(fs.existsSync(settingsPath() + '.claude-controller.bak'), '백업 생성');
   const s = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
   assert.equal(s.model, 'x', '기존 설정 보존');
@@ -118,5 +118,5 @@ test('logs: 데몬·hook 로그 끝부분을 보여주고, doctor가 로그 경�
 });
 
 test('shell-init은 cl 함수를 출력한다', () => {
-  assert.match(run(['shell-init']).stdout, /^cl\(\) \{/m);
+  assert.match(run(['shell-init']).stdout, /^ccode\(\) \{/m);
 });

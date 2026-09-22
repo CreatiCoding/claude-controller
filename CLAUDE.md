@@ -44,7 +44,7 @@
    명령(`/usr/bin/env`), command 없는 Bash는 규칙을 만들지 않고, 규칙 기록에 실패해도 `once`로
    강등한다(폰에 안내 띠) — "다시 묻지 않기"가 조용히
    과도하게 넓어지거나 조용히 무시되는 두 경우를 모두 막기 위해.
-6. **다이얼 기능은 tmux 전제** — 데몬이 `tmux send-keys`로 주입. `shell/cl.sh`의 `cl`
+6. **다이얼 기능은 tmux 전제** — 데몬이 `tmux send-keys`로 주입. `shell/ccode.sh`의 `ccode`
    함수가 tmux를 자동으로 씌운다. tmux 없이도 허가 응답·상태 표시는 전부 동작.
 7. **장애 시 무해(fail-open)** — hook이 타임아웃(기본 300초)되거나 데몬이 죽어 있으면
    무출력 종료 → Claude Code의 기본 터미널 프롬프트로 자연스럽게 넘어간다.
@@ -62,7 +62,7 @@
   hook-handler는 복사돼 실행되므로 이 모듈을 import하지 않고 같은 형식의 로그 함수를 자체 보유한다.
   테스트는 `CLAUDE_CONTROLLER_LOG_DIR`로 격리.
 - `src/doctor.js` — 환경 진단. 각 검사가 `{name,status,detail,fix}`를 돌려주고 `formatChecks`가 출력
-- `src/hooks-install.js` — hook 등록/제거 로직. npx/dlx 같은 임시 경로면 handler·cl.sh를
+- `src/hooks-install.js` — hook 등록/제거 로직. npx/dlx 같은 임시 경로면 handler·ccode.sh를
   `~/.claude-controller/`에 복사해 그 경로를 등록(캐시가 지워져도 hook이 살아 있게)
 - `scripts/install-hooks.js` — 위 로직의 얇은 래퍼(리포 사용자용)
 - `scripts/install-cli.sh` — publish 없이 로컬 바이너리 설치(클론→빌드→`~/.local/bin` 래퍼). `curl | bash` 대응,

@@ -43,7 +43,7 @@ claude-controller doctor          # 새 환경에서 잘 될지 진단
 | `claude-controller install-hooks` | `~/.claude/settings.json`에 hook 등록 + Karabiner 규칙 복사. 재실행하면 갱신 |
 | `claude-controller uninstall-hooks` | 이 도구의 hook만 제거 |
 | `claude-controller logs [-n N] [--follow] [--hook\|--daemon]` | 로그 보기 ([문제 해결](#문제-해결)) |
-| `claude-controller shell-init` | `cl` 함수 출력 — `eval "$(claude-controller shell-init)"` |
+| `claude-controller shell-init` | `ccode` 함수 출력 — `eval "$(claude-controller shell-init)"` |
 
 설정은 리포 루트 `config.json` 또는 `~/.claude-controller/config.json`. `~/.claude-controller/`에는 클론(`repo/`),
 로그(`logs/`), 설정이 모인다. npm에 발행돼 있다면 `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로도
@@ -62,7 +62,7 @@ claude-controller doctor          # 새 환경에서 잘 될지 진단
 | 데몬 | `127.0.0.1:포트` 응답 여부, 포트를 다른 프로세스가 점유했는지 |
 | hook → 데몬 왕복 | 실제 hook-handler로 SessionStart를 보내 데몬에 도착하는지 (자동으로 정리) |
 | 폰 연결 경로 | Wi-Fi 인터페이스 식별(제외 대상), 아이폰 테더링 인터페이스 감지(Wi-Fi에만 있으면 경고), adb 기기 |
-| 선택 도구 | tmux, Karabiner 규칙 복사 여부, rc 파일의 `cl.sh` source |
+| 선택 도구 | tmux, Karabiner 규칙 복사 여부, rc 파일의 `ccode.sh` source |
 
 ## 준비하기 (리포로 쓸 때, 처음 한 번만 5분)
 
@@ -85,10 +85,10 @@ git clone <이 리포> && cd claude-controller
 클론에서 `claude-controller` 명령까지 쓰고 싶으면 대신 `./scripts/install-cli.sh`를 실행하면 된다 — 이 클론을
 그대로 쓰면서 `~/.local/bin/claude-controller` 래퍼만 만든다.
 
-**3. `~/.zshrc`에 한 줄 추가** (터미널에서 `cl` 명령을 쓰기 위해)
+**3. `~/.zshrc`에 한 줄 추가** (터미널에서 `ccode` 명령을 쓰기 위해)
 
 ```bash
-source /경로/claude-controller/shell/cl.sh        # 또는 eval "$(claude-controller shell-init)"
+source /경로/claude-controller/shell/ccode.sh        # 또는 eval "$(claude-controller shell-init)"
 ```
 
 **4. 폰 준비**
@@ -109,7 +109,7 @@ source /경로/claude-controller/shell/cl.sh        # 또는 eval "$(claude-cont
 
 ```bash
 claude-controller start   # ① 데몬 켜기 (리포에서는 yarn start 또는 node src/daemon.js)
-cl                        # ② 작업할 프로젝트 폴더에서 Claude Code 실행
+ccode                     # ② 작업할 프로젝트 폴더에서 Claude Code 실행
 ```
 
 뭔가 이상하면 `claude-controller doctor`, 그래도 모르겠으면 `claude-controller logs` ([문제 해결](#문제-해결)).
@@ -127,8 +127,8 @@ cl                        # ② 작업할 프로젝트 폴더에서 Claude Code 
 - 폰을 안 보고 있어도 5분 안에 응답 없으면 터미널에 평소처럼 프롬프트가 뜬다
 
 > tmux는 다이얼(생각 토글·모델 전환) 기능에만 필요하다. 그냥 `claude`로(또는 VSCode
-> 터미널에서) 실행해도 허가 응답·상태 표시는 전부 동작한다. `cl`은 tmux를 알아서
-> 씌워주는 명령(같은 폴더에서 다시 실행하면 기존 세션에 재접속, `cl --resume`처럼 인자도 전달됨).
+> 터미널에서) 실행해도 허가 응답·상태 표시는 전부 동작한다. `ccode`은 tmux를 알아서
+> 씌워주는 명령(같은 폴더에서 다시 실행하면 기존 세션에 재접속, `ccode --resume`처럼 인자도 전달됨).
 
 ## 개발
 
@@ -267,7 +267,7 @@ claude-controller doctor            # 최근 300줄의 경고/오류 건수와 �
   스키마가 바뀐 것이다.
 - **데몬이 바로 죽음** — 9200 포트를 다른 프로세스가 쓰고 있으면 127.0.0.1 바인딩 실패로 종료한다
   (`lsof -iTCP:9200`). `config.json`의 `port`를 바꾸고 hook을 재등록하면 된다.
-- **폰에서 `cl`로 띄운 세션의 모델을 바꾸고 싶음** — `cl`은 모델을 지정하지 않는다. 필요하면 `cl --model opus`처럼 인자로 넘긴다.
+- **폰에서 `ccode`로 띄운 세션의 모델을 바꾸고 싶음** — `ccode`은 모델을 지정하지 않는다. 필요하면 `ccode --model opus`처럼 인자로 넘긴다.
 - **매크로패드/다이얼 문제** — [ADVANCED_MACROPAD.md](ADVANCED_MACROPAD.md)의 문제 해결 참고.
 
 ## 설계 노트

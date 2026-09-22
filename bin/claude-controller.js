@@ -17,7 +17,7 @@ const HELP = `claude-controller — 폰으로 Claude Code 허가에 응답하는
   install-hooks    ~/.claude/settings.json 에 hook 등록 (+ Karabiner 규칙 복사)
                    npx/yarn dlx처럼 임시 경로에서 실행하면 handler를 ~/.claude-controller/ 에 복사해 등록
   uninstall-hooks  이 도구의 hook만 제거
-  shell-init       cl 셸 함수 출력 — ~/.zshrc 에  eval "$(claude-controller shell-init)"
+  shell-init       ccode 셸 함수 출력 — ~/.zshrc 에  eval "$(claude-controller shell-init)"
   logs             로그 보기 (~/.claude-controller/logs/). -n 100, --follow, --hook|--daemon
   help             이 도움말
 
@@ -39,8 +39,8 @@ async function main() {
       const copy = args.includes('--copy') ? true : args.includes('--no-copy') ? false : isEphemeralInstall();
       const { handler } = installHooks({ copy });
       copyKarabinerRule();
-      const cl = copy ? path.join(path.dirname(handler), 'cl.sh') : path.join(ROOT, 'shell', 'cl.sh');
-      console.log(`\n다음 단계:\n  1) 데몬 실행: claude-controller start\n  2) ~/.zshrc 에 추가: source ${cl}\n  3) 폰 브라우저에서 대시보드 열기 (README 참고)\n  4) claude-controller doctor 로 점검`);
+      const ccode = copy ? path.join(path.dirname(handler), 'ccode.sh') : path.join(ROOT, 'shell', 'ccode.sh');
+      console.log(`\n다음 단계:\n  1) 데몬 실행: claude-controller start\n  2) ~/.zshrc 에 추가: source ${ccode}\n  3) 폰 브라우저에서 대시보드 열기 (README 참고)\n  4) claude-controller doctor 로 점검`);
       return;
     }
     case 'uninstall-hooks': {
@@ -68,7 +68,7 @@ async function main() {
       return;
     }
     case 'shell-init':
-      process.stdout.write(fs.readFileSync(path.join(ROOT, 'shell', 'cl.sh'), 'utf8'));
+      process.stdout.write(fs.readFileSync(path.join(ROOT, 'shell', 'ccode.sh'), 'utf8'));
       return;
     case 'help': case '--help': case '-h':
       process.stdout.write(HELP);

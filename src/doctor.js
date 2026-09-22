@@ -188,7 +188,7 @@ export async function runChecks({ port = config.port } = {}) {
   // 10. 셸 함수
   const rc = ['.zshrc', '.bashrc', '.bash_profile'].map((f) => path.join(os.homedir(), f)).filter((f) => fs.existsSync(f));
   const sourced = rc.some((f) => /cl\.sh/.test(fs.readFileSync(f, 'utf8')));
-  add('cl 셸 함수', sourced ? 'ok' : 'info', sourced ? 'rc 파일에서 cl.sh를 source함' : 'rc 파일에 cl.sh source 없음 — `claude`로 직접 실행해도 허가 응답은 동작');
+  add('ccode 셸 함수', sourced ? 'ok' : 'info', sourced ? 'rc 파일에서 ccode.sh를 source함' : 'rc 파일에 ccode.sh source 없음 — `claude`로 직접 실행해도 허가 응답은 동작');
 
   // 11. 로그 — 최근 오류·경고 요약 (원인 추적의 출발점)
   for (const name of ['daemon', 'hook']) {

@@ -55,7 +55,7 @@ Karabiner-Elements 열기 → Complex Modifications → **Add rule** → "claude
   `tmux send-keys M-t`로 주입. **현재 버전은 단계가 아닌 ON/OFF 토글**이라 좌/우 모두 토글이며,
   대시보드에는 방향 기준 추정 상태(ON/OFF)를 표시한다.
 - 모델 전환: `tmux send-keys`로 `/model <이름>` 입력 + Enter. 순환 목록은 config의 `modelCycle`.
-- 다이얼 기능은 Claude Code가 tmux 안에서 실행 중일 때만 동작한다(`cl`로 실행하면 자동 충족).
+- 다이얼 기능은 Claude Code가 tmux 안에서 실행 중일 때만 동작한다(`ccode`로 실행하면 자동 충족).
   매크로패드 없이 `POST /api/action`으로도 호출할 수 있다.
 
 ## 문제 해결
@@ -63,7 +63,7 @@ Karabiner-Elements 열기 → Complex Modifications → **Add rule** → "claude
 - **매크로패드 반응 없음** — Karabiner-Elements에서 규칙이 활성화됐는지, 입력 모니터링 권한이
   허용됐는지 확인. Karabiner EventViewer로 매크로패드가 실제로 f19~f24를 보내는지 확인.
 - **다이얼이 안 먹음** — Claude Code가 tmux 안에서 실행 중인지 확인(hook이 `$TMUX_PANE`을 보내야 함).
-  `cl`로 실행했으면 자동으로 충족된다. 다이얼만 tmux가 필요하고 나머지 기능은 tmux 없이 동작한다.
+  `ccode`로 실행했으면 자동으로 충족된다. 다이얼만 tmux가 필요하고 나머지 기능은 tmux 없이 동작한다.
 - **Karabiner를 설치할 수 없는 환경(플랜 B)** — 폰 대시보드 터치 응답은 Karabiner 없이도
   동작한다. Hammerspoon을 쓸 수 있다면 `hammerspoon/init.lua`가 동일 기능의 대체재.
   물리 버튼이 꼭 필요하면 데몬에 IOHIDManager 기반 키 감지(네이티브 헬퍼)를 추가하는

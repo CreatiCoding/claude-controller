@@ -43,7 +43,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 **사용자**: 맥북(macOS)에서 Claude Code CLI를 tmux/터미널로 쓰는 개인 개발자. 폰(아이폰 또는 안드로이드)이 있고 USB 케이블로 맥에 연결할 수 있다. Node 20.19 이상.
 
 **S1. 허가 응답 (핵심)**
-1. 사용자가 `cl`(또는 `claude`)로 세션을 켜고 다른 창에서 일한다.
+1. 사용자가 `ccode`(또는 `claude`)로 세션을 켜고 다른 창에서 일한다.
 2. Claude가 `git push`를 실행하려 하고 허가가 필요하다.
 3. 폰 화면이 주황색으로 점멸하고(안드로이드는 진동) 도구명과 명령이 카드로 뜬다.
 4. 사용자가 **예 / 예, 다시 묻지 않기 / 아니오 / 터미널에서 응답할게요** 중 하나를 터치한다.
@@ -108,7 +108,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | F-22 | hook 타임아웃: PermissionRequest 3600초, 나머지 10초. hook-handler 자체 fetch 타임아웃은 허가 1시간, 그 외 3초 | 구현 |
 | F-23 | `scripts/uninstall-hooks.js`로 이 리포의 hook만 제거(command에 `hook-handler.js` 포함 항목). 백업은 만들지 않는다 | 구현 |
 | F-24 | yarn/corepack이 없는 환경(node 25+)에서도 설치가 완주한다(`npx corepack` 폴백) | 구현·검증 |
-| F-25 | `cl` 셸 함수: tmux 밖이면 프로젝트별 tmux 세션(`claude-<폴더명>`, 특수문자는 `_`)을 만들어 claude 실행, 같은 폴더에서 재실행하면 기존 세션에 재접속(이때 전달한 인자는 무시됨), 이미 tmux 안이면 그냥 `claude`. 인자는 tmux 경유 시 공백 기준으로 합쳐진다. tmux 없으면 경고 후 plain claude. 모델은 지정하지 않는다 | 구현 |
+| F-25 | `ccode` 셸 함수: tmux 밖이면 프로젝트별 tmux 세션(`claude-<폴더명>`, 특수문자는 `_`)을 만들어 claude 실행, 같은 폴더에서 재실행하면 기존 세션에 재접속(이때 전달한 인자는 무시됨), 이미 tmux 안이면 그냥 `claude`. 인자는 tmux 경유 시 공백 기준으로 합쳐진다. tmux 없으면 경고 후 plain claude. 모델은 지정하지 않는다 | 구현 |
 
 ### 5.4 다이얼 액션 (P1, 선택)
 
@@ -123,8 +123,8 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 
 | ID | 요구사항 | 상태 |
 | --- | --- | --- |
-| F-30 | **CLI 패키징**: `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로 클론 없이 사용. 명령은 `doctor`·`start`·`install-hooks`·`uninstall-hooks`·`shell-init`·`help`. npm 패키지는 `dist/`를 동봉(`prepack`에서 빌드). npx/dlx 캐시처럼 임시 경로에서 `install-hooks`를 실행하면 handler와 cl.sh를 `~/.claude-controller/`에 복사해 그 경로를 등록한다(캐시가 지워져도 hook이 살아 있게). `--copy`/`--no-copy`로 강제. 설정은 `~/.claude-controller/config.json`(리포 루트가 우선) | 구현·검증(tarball 설치 후 npx로 install-hooks·doctor 실행, 격리 HOME 테스트 7개) |
-| F-31 | **doctor**: 새 환경에서 동작할지 진단. Node 버전, claude CLI, dist 존재, config 파싱·`0.0.0.0` 경고, hook 5개 이벤트 등록, hook 명령의 node 절대경로 존재, handler 존재·복사본 최신 여부, hook 포트=데몬 포트, hook 타임아웃≥대기 시간, 데몬 응답·포트 점유 프로세스, **실제 hook-handler로 SessionStart 왕복**(자동 정리), Wi-Fi 인터페이스 식별, 테더링 인터페이스(Wi-Fi에만 있으면 경고), adb 기기, tmux, Karabiner 규칙, rc의 cl.sh source. 실패가 있으면 종료 코드 1, `--json` 출력 | 구현·검증(데몬 유무 양쪽, 포트 불일치·오래된 복사본 감지 테스트) |
+| F-30 | **CLI 패키징**: `npx @creaticoding/claude-controller <명령>` / `yarn dlx …`로 클론 없이 사용. 명령은 `doctor`·`start`·`install-hooks`·`uninstall-hooks`·`shell-init`·`help`. npm 패키지는 `dist/`를 동봉(`prepack`에서 빌드). npx/dlx 캐시처럼 임시 경로에서 `install-hooks`를 실행하면 handler와 ccode.sh를 `~/.claude-controller/`에 복사해 그 경로를 등록한다(캐시가 지워져도 hook이 살아 있게). `--copy`/`--no-copy`로 강제. 설정은 `~/.claude-controller/config.json`(리포 루트가 우선) | 구현·검증(tarball 설치 후 npx로 install-hooks·doctor 실행, 격리 HOME 테스트 7개) |
+| F-31 | **doctor**: 새 환경에서 동작할지 진단. Node 버전, claude CLI, dist 존재, config 파싱·`0.0.0.0` 경고, hook 5개 이벤트 등록, hook 명령의 node 절대경로 존재, handler 존재·복사본 최신 여부, hook 포트=데몬 포트, hook 타임아웃≥대기 시간, 데몬 응답·포트 점유 프로세스, **실제 hook-handler로 SessionStart 왕복**(자동 정리), Wi-Fi 인터페이스 식별, 테더링 인터페이스(Wi-Fi에만 있으면 경고), adb 기기, tmux, Karabiner 규칙, rc의 ccode.sh source. 실패가 있으면 종료 코드 1, `--json` 출력 | 구현·검증(데몬 유무 양쪽, 포트 불일치·오래된 복사본 감지 테스트) |
 | F-32 | **한 줄 로컬 설치**(`scripts/install-cli.sh`, publish 불필요): `curl … \| bash`로 리포를 `~/.claude-controller/repo`에 얕은 클론(이미 있으면 `git pull --ff-only`), yarn→corepack→npx corepack 폴백으로 의존성 설치·빌드, `~/.local/bin/claude-controller` 래퍼(`exec node <repo>/bin/claude-controller.js`) 생성, PATH 미포함 시 안내. 클론 안에서 실행하면 그 클론 사용. `--uninstall`로 래퍼·클론 제거. `CC_REPO_DIR`/`CC_BIN_DIR`/`CC_REPO_URL`/`CC_BRANCH`로 위치 변경. node 20.19 미만이면 중단 | 구현·검증(클론 내·파이프(GitHub 클론)·재실행·제거 4경로 실행 확인) |
 | F-33 | **logs 명령**: `claude-controller logs`로 `daemon.log`·`hook.log` 끝부분 출력(`-n`, `--follow`=tail -F, `--hook`/`--daemon`). 로그 내용은 N-8 | 구현·검증 |
 
@@ -161,7 +161,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 | 개발 | — | `yarn dev`(vite 5173, `/api`·`/ws`를 9200으로 프록시), `yarn build`(dist/), `yarn test`, `yarn doctor` |
 | CLI | 사용자 | `claude-controller doctor [--json]` / `start` / `install-hooks [--copy\|--no-copy]` / `uninstall-hooks` / `logs [-n N] [--follow] [--hook\|--daemon]` / `shell-init` / `help`. 진입점 `bin/claude-controller.js`(npm `bin`), 알 수 없는 명령은 exit 2 |
 | 설치 스크립트 | 사용자 | `scripts/install-cli.sh` — `CC_REPO_DIR`(기본 `~/.claude-controller/repo`), `CC_BIN_DIR`(기본 `~/.local/bin`), `CC_REPO_URL`, `CC_BRANCH`, `CC_NO_PULL`; `--uninstall` |
-| `~/.claude-controller/` | — | `repo/`(한 줄 설치 클론), `logs/daemon.log`·`logs/hook.log`(+`.1`), `config.json`, `hook-handler.js`·`cl.sh`(npx/dlx 등 임시 경로에서 등록했을 때 복사본) |
+| `~/.claude-controller/` | — | `repo/`(한 줄 설치 클론), `logs/daemon.log`·`logs/hook.log`(+`.1`), `config.json`, `hook-handler.js`·`ccode.sh`(npx/dlx 등 임시 경로에서 등록했을 때 복사본) |
 | 로그 | 데몬·hook → 파일 | 형식 `YYYY-MM-DD HH:mm:ss.SSS [LEVEL] 메시지`(로컬 시각). 위치는 `CLAUDE_CONTROLLER_LOG_DIR`로 변경(테스트 격리용). 상세는 N-8 |
 
 포트를 9200에서 바꾸면 hook 재등록(`claude-controller install-hooks`)이 필요하고(doctor가 불일치를 잡는다), Karabiner/Hammerspoon 파일과 vite 프록시의 9200은 직접 바꿔야 한다.
@@ -228,7 +228,7 @@ Claude Code를 터미널에서 돌려 두면 허가 프롬프트(예/아니오)�
 - 허가 요청이 오래 대기하면 폰 푸시 알림 대체 수단
 - SessionStart 페이로드에 모델이 실리면 초기 모델 표시
 - npm publish(`@creaticoding/claude-controller`)와 `npx` 경로 실사용 검증
-- `cl`이 같은 이름의 다른 경로 폴더와 tmux 세션을 공유하는 문제(세션명에 경로 해시 포함)
+- `ccode`이 같은 이름의 다른 경로 폴더와 tmux 세션을 공유하는 문제(세션명에 경로 해시 포함)
 - 매크로패드 KEY2(항상 예)가 once로 강등됐을 때의 표시(현재는 폰 화면만 안내)
 - 강등 안내 문구에서 "규칙 생성 불가"와 "기록 실패" 구분(응답에 reason 추가)
 - 데몬을 launchd 서비스로 등록하는 `claude-controller service install`

@@ -34,7 +34,7 @@ export function resolveHandlerPath({ copy = isEphemeralInstall() } = {}) {
   fs.mkdirSync(HOME_DIR, { recursive: true });
   const dest = path.join(HOME_DIR, 'hook-handler.js');
   fs.copyFileSync(SRC_HANDLER, dest);
-  fs.copyFileSync(path.join(ROOT, 'shell', 'cl.sh'), path.join(HOME_DIR, 'cl.sh'));
+  fs.copyFileSync(path.join(ROOT, 'shell', 'ccode.sh'), path.join(HOME_DIR, 'ccode.sh'));
   return dest;
 }
 
