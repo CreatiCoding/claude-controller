@@ -67,16 +67,28 @@ function readJson(req) {
 // 폰의 localhost)로 쏘는 cross-site POST를 막는다. (1) application/json만 받아 preflight 없는
 // text/plain simple request를 차단, (2) Origin이 있으면 우리 host와 같아야 한다.
 // curl·hook-handler·Karabiner·Hammerspoon은 Origin을 보내지 않으므로 그대로 통과.
+// Host/Origin은 "요청의 Host와 같은가"가 아니라 "데몬이 실제로 열어 둔 주소인가"로 본다.
+// Host 헤더끼리 비교하면 DNS 리바인딩(evil.example → 127.0.0.1)으로 같은 값이 만들어져 뚫린다.
+function allowedHosts() {
+  const hosts = new Set([`127.0.0.1:${config.port}`, `localhost:${config.port}`, `[::1]:${config.port}`]);
+  for (const addr of servers.keys()) hosts.add(`${addr}:${config.port}`);
+  if (config.host !== 'auto') hosts.add(`${config.host}:${config.port}`);
+  return hosts;
+}
+
 function rejectCrossSite(req) {
   const ct = String(req.headers['content-type'] ?? '');
   if (!ct.toLowerCase().startsWith('application/json')) {
     throw new HttpError(415, 'Content-Type은 application/json이어야 함');
   }
+  const hosts = allowedHosts();
+  const host = String(req.headers.host ?? '').toLowerCase();
+  if (!hosts.has(host)) throw new HttpError(403, `허용되지 않은 Host: ${host || '(없음)'}`);
   const origin = req.headers.origin;
   if (origin) {
-    let host;
-    try { host = new URL(origin).host; } catch { throw new HttpError(403, 'Origin 형식 오류'); }
-    if (host !== req.headers.host) throw new HttpError(403, `허용되지 않은 Origin: ${origin}`);
+    let oh;
+    try { oh = new URL(origin).host.toLowerCase(); } catch { throw new HttpError(403, `Origin 형식 오류: ${origin}`); } // 'null' 포함
+    if (!hosts.has(oh)) throw new HttpError(403, `허용되지 않은 Origin: ${origin}`);
   }
 }
 
@@ -212,6 +224,7 @@ async function runDial(action, session) {
     }
     case 'model_cycle': {
       const cycle = config.modelCycle;
+      if (!Array.isArray(cycle) || cycle.length === 0) return { ok: false, error: 'config.modelCycle이 비어 있음' };
       const idx = cycle.indexOf(session.model);
       const next = cycle[(idx + 1) % cycle.length];
       await typeLine(session.tmuxPane, `/model ${next}`);

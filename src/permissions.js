@@ -62,8 +62,16 @@ export function addAllowRule(cwd, rule) {
   settings.permissions.allow ??= [];
   if (!settings.permissions.allow.includes(rule)) {
     settings.permissions.allow.push(rule);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
+    try {
+      // cwd가 사라졌으면 프로젝트 폴더를 통째로 되살리지 않는다 — 규칙을 기록할 곳이 없는 것으로 본다
+      if (!fs.existsSync(cwd)) throw new Error('cwd가 존재하지 않음');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
+    } catch (err) {
+      // 읽기 전용 볼륨(EROFS)·권한 없음(EACCES) 등 — 호출자가 once로 강등한다
+      console.error(`[permissions] ${file} 기록 실패(${err.message}) — 규칙 추가 건너뜀`);
+      return false;
+    }
     console.log(`[permissions] allow 규칙 추가: ${rule} → ${file}`);
   }
   return true;
