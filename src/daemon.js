@@ -28,7 +28,7 @@ function serveStatic(req, res) {
   let name = new URL(req.url, 'http://x').pathname;
   if (name === '/') name = '/index.html';
   const file = path.join(PUBLIC_DIR, path.normalize(name));
-  if (!file.startsWith(PUBLIC_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  if (!file.startsWith(PUBLIC_DIR + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
     if (name === '/index.html') {
       res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('대시보드 빌드가 없습니다 — 리포 루트에서 `yarn build`를 먼저 실행하세요.');
@@ -42,15 +42,42 @@ function serveStatic(req, res) {
 }
 
 // ---------- 유틸 ----------
+class HttpError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
+}
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', (c) => { body += c; if (body.length > 1_000_000) req.destroy(); });
+    let tooLarge = false;
+    req.on('data', (c) => {
+      if (tooLarge) return; // 나머지는 읽어서 버린다 (소켓을 끊으면 413 응답이 못 나간다)
+      body += c;
+      if (body.length > 1_000_000) { tooLarge = true; body = ''; }
+    });
     req.on('end', () => {
-      try { resolve(body ? JSON.parse(body) : {}); } catch (e) { reject(e); }
+      if (tooLarge) return reject(new HttpError(413, '요청 본문이 1MB를 넘음'));
+      try { resolve(body ? JSON.parse(body) : {}); } catch { reject(new HttpError(400, '본문이 JSON이 아님')); }
     });
     req.on('error', reject);
   });
+}
+
+// CSRF 방어: 승인 API에 인증이 없으므로, 브라우저에 열린 임의 페이지가 127.0.0.1(또는 adb reverse된
+// 폰의 localhost)로 쏘는 cross-site POST를 막는다. (1) application/json만 받아 preflight 없는
+// text/plain simple request를 차단, (2) Origin이 있으면 우리 host와 같아야 한다.
+// curl·hook-handler·Karabiner·Hammerspoon은 Origin을 보내지 않으므로 그대로 통과.
+function rejectCrossSite(req) {
+  const ct = String(req.headers['content-type'] ?? '');
+  if (!ct.toLowerCase().startsWith('application/json')) {
+    throw new HttpError(415, 'Content-Type은 application/json이어야 함');
+  }
+  const origin = req.headers.origin;
+  if (origin) {
+    let host;
+    try { host = new URL(origin).host; } catch { throw new HttpError(403, 'Origin 형식 오류'); }
+    if (host !== req.headers.host) throw new HttpError(403, `허용되지 않은 Origin: ${origin}`);
+  }
 }
 
 function json(res, code, obj) {
@@ -89,6 +116,9 @@ async function handleHookEvent(req, res) {
       const type = payload.notification_type ?? '';
       const patch = { ...base, lastEvent: `notify:${type}`, lastMessage: payload.message ?? null };
       if (type === 'idle_prompt' || type === 'agent_needs_input') patch.status = SessionStatus.INPUT;
+      // passthrough/타임아웃 뒤 터미널에 기본 허가 프롬프트가 떠 있는 상태. 우리 hook이 아직
+      // 잡고 있는 요청이 있으면(폰 카드가 떠 있음) 그쪽이 우선이므로 건드리지 않는다.
+      if (type === 'permission_prompt' && !store.hasPending(sid)) patch.status = SessionStatus.INPUT;
       store.upsertSession(sid, patch);
       return json(res, 200, {});
     }
@@ -116,17 +146,6 @@ async function handleHookEvent(req, res) {
       });
       const decision = await wait;
       clearTimeout(timer);
-
-      if (decision.decision === 'always') {
-        // 규칙을 실제로 기록한 경우에만 'always'. cwd 없음·settings.local.json 파싱 실패 등으로
-        // 기록이 안 되면 1회 승인으로 강등해 "다시 묻지 않기"가 조용히 무시되는 일을 막는다.
-        const cwd = payload.cwd ?? store.sessions.get(sid)?.cwd;
-        if (!decision.rule || !addAllowRule(cwd, decision.rule)) {
-          console.log(`[perm] allow 규칙 기록 실패(rule=${decision.rule ?? '없음'}, cwd=${cwd ?? '없음'}) — 1회 승인으로 강등`);
-          decision.decision = 'once';
-          delete decision.rule;
-        }
-      }
       console.log(`[perm] 결정: ${decision.decision}${decision.rule ? ` (${decision.rule})` : ''}`);
       return json(res, 200, decision);
     }
@@ -152,8 +171,17 @@ function respond(requestId, decisionName) {
   if (!p) return { ok: false, error: '해당 허가 요청이 없거나 이미 처리됨' };
   const result = { decision: decisionName };
   if (decisionName === 'always') {
-    result.rule = ruleForRequest(p);
-    if (!result.rule) result.decision = 'once'; // 규칙을 못 만들면 1회 승인으로 강등
+    // 규칙을 만들고 실제로 기록한 경우에만 'always'. 복합 명령이라 규칙이 없거나, cwd 없음·
+    // settings.local.json 파싱 실패로 기록이 안 되면 1회 승인으로 강등해 "다시 묻지 않기"가
+    // 조용히 넓어지거나 조용히 무시되는 두 경우를 모두 막는다. 폰 응답과 hook 출력이 같은
+    // 값을 보도록 여기서(응답을 만들기 전에) 결정한다.
+    const rule = ruleForRequest(p);
+    if (rule && addAllowRule(p.cwd, rule)) {
+      result.rule = rule;
+    } else {
+      console.log(`[perm] allow 규칙 ${rule ? `기록 실패(cwd=${p.cwd ?? '없음'})` : '생성 불가(복합/래퍼 명령)'} — 1회 승인으로 강등`);
+      result.decision = 'once';
+    }
   }
   store.resolvePending(requestId, result);
   return { ok: true, decision: result.decision, rule: result.rule ?? null };
@@ -162,7 +190,17 @@ function respond(requestId, decisionName) {
 async function dialAction(action, sessionId) {
   const session = sessionId ? store.sessions.get(sessionId) : store.activeSession();
   if (!session?.tmuxPane) return { ok: false, error: 'tmux pane을 아는 활성 세션이 없음 (Claude Code를 tmux 안에서 실행했는지 확인)' };
+  if (session.status === SessionStatus.ENDED) return { ok: false, error: '종료된 세션' };
 
+  try {
+    return await runDial(action, session);
+  } catch (err) {
+    // tmux가 PATH에 없거나 pane이 사라진 경우 — 500 대신 실패 사유를 돌려준다
+    return { ok: false, error: `tmux 실행 실패: ${err.message}` };
+  }
+}
+
+async function runDial(action, session) {
   switch (action) {
     case 'thinking_down':
     case 'thinking_up': {
@@ -205,6 +243,8 @@ const requestHandler = async (req, res) => {
   try {
     const { pathname } = new URL(req.url, 'http://x');
 
+    if (req.method === 'POST') rejectCrossSite(req);
+
     if (req.method === 'POST' && pathname === '/hook/event') return await handleHookEvent(req, res);
 
     if (req.method === 'POST' && pathname === '/api/respond') {
@@ -232,8 +272,8 @@ const requestHandler = async (req, res) => {
     if (req.method === 'GET') return serveStatic(req, res);
     json(res, 404, { error: 'not found' });
   } catch (err) {
-    console.error('[http]', err);
-    if (!res.headersSent) json(res, 500, { error: err.message });
+    if (!(err instanceof HttpError)) console.error('[http]', err);
+    if (!res.headersSent) json(res, err.status ?? 500, { error: err.message });
   }
 };
 
@@ -272,9 +312,9 @@ function listenOn(addr, onReady) {
   s.on('error', (err) => {
     console.error(`[daemon] ${addr}:${config.port} 바인딩 실패: ${err.message}`);
     servers.delete(addr);
-    if (addr === '127.0.0.1') {
-      // 루프백이 없으면 hook-handler가 닿을 수 없어 데몬이 떠 있어도 아무 일도 못 한다.
-      console.error('[daemon] 127.0.0.1 바인딩 없이는 동작할 수 없습니다 — 포트 사용 중인 프로세스를 확인하거나 config.json의 port를 바꾸세요');
+    if (addr === '127.0.0.1' || addr === config.host) {
+      // 루프백(또는 고정 host)이 없으면 hook-handler가 닿을 수 없어 데몬이 떠 있어도 아무 일도 못 한다.
+      console.error(`[daemon] ${addr} 바인딩 없이는 동작할 수 없습니다 — 포트 사용 중인 프로세스를 확인하거나 config.json의 port를 바꾸세요`);
       process.exit(1);
     }
   });
@@ -286,15 +326,16 @@ function listenOn(addr, onReady) {
 }
 
 // 자동 바인딩에서 제외할 인터페이스 이름 집합. 'wifi'는 macOS Wi-Fi 포트 이름으로 치환.
-const excludedIfaces = resolveExcludedInterfaces(config.excludeInterfaces);
+const excludedIfaces = config.host === 'auto' ? resolveExcludedInterfaces(config.excludeInterfaces) : new Set();
 function resolveExcludedInterfaces(names) {
   const out = new Set();
   for (const n of names ?? []) {
     if (n !== 'wifi') { out.add(n); continue; }
     try {
       const txt = execFileSync('/usr/sbin/networksetup', ['-listallhardwareports'], { encoding: 'utf8', timeout: 5000 });
-      const m = txt.match(/Hardware Port: Wi-Fi\nDevice: (\S+)/);
+      const m = txt.match(/Hardware Port: (?:Wi-Fi|AirPort)\nDevice: (\S+)/);
       if (m) out.add(m[1]);
+      else console.warn('[daemon] networksetup 출력에서 Wi-Fi 포트를 찾지 못했습니다 — excludeInterfaces에 인터페이스 이름(en0 등)을 직접 적으세요');
     } catch {
       // networksetup 없음(비-macOS 등) — Wi-Fi 제외를 못 하므로 경고만
       console.warn('[daemon] Wi-Fi 인터페이스를 찾지 못했습니다 — 핫스팟에 Wi-Fi로 붙어 있으면 그 대역에도 바인딩될 수 있습니다');
