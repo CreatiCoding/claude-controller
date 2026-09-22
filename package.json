@@ -32,9 +32,7 @@
     "react-dom": "^19.1.0",
     "vite": "^7.0.0"
   },
-  "bin": {
-    "claude-controller": "bin/claude-controller.js"
-  },
+  "bin": "bin/claude-controller.js",
   "files": [
     "bin",
     "src",
